@@ -1,0 +1,78 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: gcp-cost-mcp-server
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: gcp-cost-mcp-server
+    main: .
+    binary: gcp-cost-mcp-server
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: binary
+    format: binary
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}{{ if eq .Os \"windows\" }}.exe{{ end }}"
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+
+release:
+  github:
+    owner: nozomi-koborinai
+    name: gcp-cost-mcp-server
+  draft: false
+  prerelease: auto
+  mode: replace
+  name_template: "{{.Tag}}"
+
+brews:
+  - name: gcp-cost-mcp-server
+    repository:
+      owner: nozomi-koborinai
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    commit_author:
+      name: github-actions[bot]
+      email: github-actions[bot]@users.noreply.github.com
+    commit_msg_template: "chore: update {{ .ProjectName }} to {{ .Tag }}"
+    directory: Formula
+    homepage: "https://github.com/nozomi-koborinai/gcp-cost-mcp-server"
+    description: "MCP server for estimating Google Cloud running costs"
+    license: "MIT"
+    install: |
+      bin.install "gcp-cost-mcp-server"
+    test: |
+      assert_predicate bin/"gcp-cost-mcp-server", :executable?
