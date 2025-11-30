@@ -36,7 +36,16 @@ gcloud auth application-default login
 
 **Option A: Download pre-built binary (Recommended)**
 
-Download from [GitHub Releases](https://github.com/nozomi-koborinai/gcp-cost-mcp-server/releases) for your platform.
+Download from [GitHub Releases](https://github.com/nozomi-koborinai/gcp-cost-mcp-server/releases) for your platform:
+
+| Binary | Platform | Architecture | Notes |
+|--------|----------|--------------|-------|
+| `gcp-cost-mcp-server-darwin-arm64` | macOS | Apple Silicon (M1/M2/M3/M4) | Most modern Macs |
+| `gcp-cost-mcp-server-darwin-amd64` | macOS | Intel | Older Macs (pre-2020) |
+| `gcp-cost-mcp-server-linux-amd64` | Linux | x86_64 | Most Linux servers/desktops |
+| `gcp-cost-mcp-server-windows-amd64.exe` | Windows | x86_64 | 64-bit Windows |
+
+> **Tip**: On macOS, run `uname -m` in Terminal. If it shows `arm64`, use the `darwin-arm64` binary. If it shows `x86_64`, use the `darwin-amd64` binary.
 
 **Option B: Build from source**
 
