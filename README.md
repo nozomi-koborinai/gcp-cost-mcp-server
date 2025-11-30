@@ -147,6 +147,21 @@ brew install gcp-cost-mcp-server
 
 The binary will be installed to `/opt/homebrew/bin/gcp-cost-mcp-server` (Apple Silicon) or `/usr/local/bin/gcp-cost-mcp-server` (Intel/Linux).
 
+**Upgrading to the latest version:**
+
+```bash
+# Update tap to fetch the latest Formula
+brew update
+
+# Check the available version
+brew info gcp-cost-mcp-server
+
+# Upgrade to the latest version
+brew upgrade gcp-cost-mcp-server
+```
+
+> **Note**: Always run `brew update` first to ensure you get the latest version. Without it, Homebrew uses cached Formula information.
+
 #### Option B: Download pre-built binary
 
 Download from [GitHub Releases](https://github.com/nozomi-koborinai/gcp-cost-mcp-server/releases) for your platform:
