@@ -34,20 +34,39 @@ gcloud auth application-default login
 
 ### 2. Install
 
-**Option A: Download pre-built binary (Recommended)**
+Choose the installation method that best fits your environment:
+
+#### Option A: Homebrew (macOS/Linux) — Recommended
+
+The easiest way to install on macOS or Linux:
+
+```bash
+brew tap nozomi-koborinai/tap
+brew install gcp-cost-mcp-server
+```
+
+The binary will be installed to `/opt/homebrew/bin/gcp-cost-mcp-server` (Apple Silicon) or `/usr/local/bin/gcp-cost-mcp-server` (Intel/Linux).
+
+#### Option B: Download pre-built binary
 
 Download from [GitHub Releases](https://github.com/nozomi-koborinai/gcp-cost-mcp-server/releases) for your platform:
 
-| Binary | Platform | Architecture | Notes |
-|--------|----------|--------------|-------|
-| `gcp-cost-mcp-server-darwin-arm64` | macOS | Apple Silicon (M1/M2/M3/M4) | Most modern Macs |
-| `gcp-cost-mcp-server-darwin-amd64` | macOS | Intel | Older Macs (pre-2020) |
-| `gcp-cost-mcp-server-linux-amd64` | Linux | x86_64 | Most Linux servers/desktops |
-| `gcp-cost-mcp-server-windows-amd64.exe` | Windows | x86_64 | 64-bit Windows |
+| Binary | Platform | Architecture |
+|--------|----------|--------------|
+| `gcp-cost-mcp-server-darwin-arm64` | macOS | Apple Silicon (M1/M2/M3/M4) |
+| `gcp-cost-mcp-server-darwin-amd64` | macOS | Intel |
+| `gcp-cost-mcp-server-linux-amd64` | Linux | x86_64 |
+| `gcp-cost-mcp-server-windows-amd64.exe` | Windows | x86_64 |
 
-> **Tip**: On macOS, run `uname -m` in Terminal. If it shows `arm64`, use the `darwin-arm64` binary. If it shows `x86_64`, use the `darwin-amd64` binary.
+> **macOS users**: After downloading, remove the quarantine attribute:
+> ```bash
+> chmod +x gcp-cost-mcp-server-darwin-*
+> xattr -d com.apple.quarantine gcp-cost-mcp-server-darwin-*
+> ```
 
-**Option B: Build from source**
+#### Option C: Build from source
+
+Requires Go 1.21+:
 
 ```bash
 git clone https://github.com/nozomi-koborinai/gcp-cost-mcp-server.git
@@ -55,7 +74,16 @@ cd gcp-cost-mcp-server
 go build -o gcp-cost-mcp-server .
 ```
 
-### 3. Configure Your AI Client
+### 3. Configure Your MCP Client
+
+Find your binary path first:
+
+```bash
+# If installed via Homebrew
+which gcp-cost-mcp-server
+# Output: /opt/homebrew/bin/gcp-cost-mcp-server (Apple Silicon)
+#         /usr/local/bin/gcp-cost-mcp-server (Intel/Linux)
+```
 
 #### Claude Desktop
 
@@ -65,7 +93,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "gcp-cost": {
-      "command": "/path/to/gcp-cost-mcp-server"
+      "command": "/opt/homebrew/bin/gcp-cost-mcp-server"
     }
   }
 }
@@ -73,13 +101,13 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 #### Cursor
 
-Add to `.cursor/mcp.json`:
+Add to `.cursor/mcp.json` in your project or global config:
 
 ```json
 {
   "mcpServers": {
     "gcp-cost": {
-      "command": "/path/to/gcp-cost-mcp-server"
+      "command": "/opt/homebrew/bin/gcp-cost-mcp-server"
     }
   }
 }
@@ -93,11 +121,13 @@ Add to `~/.gemini/settings.json`:
 {
   "mcpServers": {
     "gcp-cost": {
-      "command": "/path/to/gcp-cost-mcp-server"
+      "command": "/opt/homebrew/bin/gcp-cost-mcp-server"
     }
   }
 }
 ```
+
+> **Note**: Replace `/opt/homebrew/bin/gcp-cost-mcp-server` with your actual binary path if different.
 
 ## Usage Examples
 
