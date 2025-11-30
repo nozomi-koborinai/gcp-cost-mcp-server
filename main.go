@@ -54,6 +54,7 @@ func main() {
 
 	// Define tools
 	toolList := []ai.Tool{
+		tools.NewGetEstimationGuide(g), // Should be called first to understand requirements
 		tools.NewListServices(g, pricingClient),
 		tools.NewListSKUs(g, pricingClient),
 		tools.NewGetSKUPrice(g, pricingClient),
@@ -82,4 +83,3 @@ func main() {
 
 	log.Println("Server shutdown complete.")
 }
-
