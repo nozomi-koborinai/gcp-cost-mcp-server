@@ -1,0 +1,22 @@
+# Genkit
+.genkit
+
+# Reference files
+.reference
+
+# Built binary
+gcp-cost-mcp-server
+gcp-cost-mcp-server.exe
+
+# Distribution folder
+dist/
+
+# IDE
+.cursor/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
