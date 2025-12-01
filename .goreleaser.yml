@@ -73,6 +73,6 @@ brews:
     description: "MCP server for estimating Google Cloud running costs"
     license: "MIT"
     install: |
-      bin.install "gcp-cost-mcp-server"
+      bin.install Dir["gcp-cost-mcp-server*"].first => "gcp-cost-mcp-server"
     test: |
       assert_predicate bin/"gcp-cost-mcp-server", :executable?
