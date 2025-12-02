@@ -122,21 +122,6 @@ var freeTierPatterns = []FreeTierPattern{
 	},
 }
 
-// scopePatterns helps identify if free tier applies per account or per project
-var scopePatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)per\s*billing\s*account`),
-	regexp.MustCompile(`(?i)per\s*account`),
-	regexp.MustCompile(`(?i)per\s*project`),
-	regexp.MustCompile(`(?i)across\s*all\s*projects`),
-}
-
-// periodPatterns helps identify the free tier period
-var periodPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)per\s*month|monthly|/month`),
-	regexp.MustCompile(`(?i)per\s*day|daily|/day`),
-	regexp.MustCompile(`(?i)always\s*free`),
-}
-
 // ExtractFreeTierItems extracts free tier information from documentation content
 func ExtractFreeTierItems(content string) []FreeTierItem {
 	var items []FreeTierItem

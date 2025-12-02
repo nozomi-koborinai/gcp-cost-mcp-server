@@ -169,7 +169,7 @@ func TestDuckDuckGoClient_Search_ValidResponse(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		// Minimal valid DDG response (no GCP URLs, so fallback will be used)
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"AbstractURL": "",
 			"AbstractText": "",
 			"RelatedTopics": [],
