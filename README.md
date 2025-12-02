@@ -14,11 +14,11 @@ Instead of manually using the [Google Cloud Pricing Calculator](https://cloud.go
 
 | Tool | Description |
 |------|-------------|
-| `get_estimation_guide` | **Start here!** Returns required parameters and pricing factors for any GCP service |
+| `get_estimation_guide` | **Start here!** Dynamically generates estimation guides from SKU analysis for any GCP service |
 | `list_services` | Lists all available Google Cloud services with their IDs |
 | `list_skus` | Lists SKUs (billable items) for a specific service |
 | `get_sku_price` | Gets pricing details for a specific SKU |
-| `estimate_cost` | Calculates cost based on SKU and usage amount |
+| `estimate_cost` | Calculates cost based on SKU and usage amount, **with automatic free tier deduction** |
 
 ### Recommended Workflow
 
@@ -26,96 +26,42 @@ The tools are designed to work together in a conversational flow:
 
 #### Single Service Estimation
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ User: "How much would Cloud Run cost for my application?"                   │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Step 1: get_estimation_guide("Cloud Run")                                   │
-│         → Returns required parameters: region, vCPU, memory, billing type,  │
-│           instance count, monthly usage, etc.                               │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Step 2: AI asks user for details                                            │
-│         "To estimate Cloud Run costs, I need to know:                       │
-│          - Region (e.g., asia-northeast1)                                   │
-│          - vCPU and memory per instance                                     │
-│          - Number of instances                                              │
-│          - Expected monthly usage hours..."                                 │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Step 3: list_services → list_skus                                           │
-│         → Find the correct SKU IDs for the user's requirements              │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Step 4: estimate_cost(sku_id, usage_amount, ...)                            │
-│         → Calculate and return the cost estimate                            │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A["User: How much would Cloud Run cost for my application?"] --> B
+    B["Step 1: get_estimation_guide('Cloud Run')"] --> C
+    C["Returns: required parameters, pricing factors,<br/>free tier info, tips"] --> D
+    D["Step 2: AI asks user for details<br/>- Region (e.g., asia-northeast1)<br/>- vCPU and memory per instance<br/>- Number of instances<br/>- Expected monthly usage hours"] --> E
+    E["Step 3: list_services → list_skus<br/>Find the correct SKU IDs"] --> F
+    F["Step 4: estimate_cost(sku_id, usage_amount, ...)<br/>Calculate cost with free tier auto-deduction"] --> G
+    G["Return: Cost estimate with free tier applied"]
 ```
 
 #### Architecture Diagram Estimation (Multi-Service)
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ User: [Uploads architecture diagram image]                                  │
-│       "Please estimate the monthly cost for this architecture"              │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Step 1: AI analyzes the diagram                                             │
-│         → Identifies: Cloud Run, Cloud SQL, Cloud Storage, Load Balancing   │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Step 2: get_estimation_guide for EACH service                               │
-│         → Collect all required parameters for all identified services       │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Step 3: AI asks user for details (grouped)                                  │
-│         "Region: Is asia-northeast1 okay?                                   │
-│          Cloud Run: vCPU/memory/instance count?                             │
-│          Cloud SQL: DB type/machine type/storage?                           │
-│          ..."                                                               │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Step 4: For EACH service: list_services → list_skus → estimate_cost         │
-│         → Calculate cost for each service                                   │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Step 5: Present consolidated results                                        │
-│         | Service | Config | Cost |  +  Total + Optimization tips           │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A["User: [Uploads architecture diagram]<br/>'Please estimate the monthly cost'"] --> B
+    B["Step 1: AI analyzes the diagram<br/>Identifies: Cloud Run, Cloud SQL,<br/>Cloud Storage, Load Balancing"] --> C
+    C["Step 2: get_estimation_guide for EACH service<br/>Collect all required parameters"] --> D
+    D["Step 3: AI asks user for details (grouped)<br/>Region, vCPU/memory, DB type, storage..."] --> E
+    E["Step 4: For EACH service:<br/>list_services → list_skus → estimate_cost"] --> F
+    F["Step 5: Present consolidated results<br/>| Service | Config | Cost |<br/>+ Total + Optimization tips"]
 ```
 
 ### Supported Services
 
 `get_estimation_guide` works with **any Google Cloud service**:
 
-**Services with detailed guides:**
-- **Compute**: Cloud Run, Compute Engine, GKE, Cloud Functions, App Engine (Standard/Flexible)
-- **Database**: Cloud SQL, Firestore, Cloud Spanner, Memorystore for Redis
-- **Storage & Analytics**: Cloud Storage, BigQuery
-- **Messaging**: Pub/Sub
-- **Networking**: Cloud CDN, Cloud Armor
-- **DevOps**: Artifact Registry, Secret Manager
+- **Dynamic Guide Generation**: Guides are generated dynamically by analyzing SKUs from the Cloud Billing Catalog API
+- **Free Tier Information**: Automatically fetched from GCP documentation and included in the guide
+- **Universal Coverage**: Works with all GCP services - no hardcoded service list
 
-**All other services**: Returns a comprehensive generic template with common parameters (region, usage type, scale, etc.) and guidance to discover specific SKUs via `list_services`/`list_skus`.
+The tool analyzes available SKUs to determine:
+- Required parameters (region, instance type, storage, etc.)
+- Pricing factors and billing dimensions
+- Free tier quotas (when available)
+- Cost optimization tips
 
 ## Quick Start
 
@@ -263,11 +209,20 @@ AI: "To estimate Cloud Run costs accurately, I need a few more details:
 You: "Tokyo region, 1 vCPU, 2GB memory, instance-based, 24/7"
 
 AI: "Based on your requirements for 2 Cloud Run instances in Tokyo (asia-northeast1):
-    - vCPU cost: $0.000024/vCPU-sec × 2 vCPU × 2,628,000 sec = $126.14/month
-    - Memory cost: $0.0000025/GiB-sec × 4 GiB × 2,628,000 sec = $26.28/month
-    - Total estimated: ~$152.42/month (before free tier)
+
+    📊 Cost Breakdown:
+    - vCPU: 2 vCPU × 2,628,000 sec = 5,256,000 vCPU-seconds
+      Free tier applied: -180,000 vCPU-seconds
+      Billable: 5,076,000 vCPU-seconds × $0.000024 = $121.82/month
     
-    💡 Tip: Cloud Run has a free tier of 240,000 vCPU-seconds and 450,000 GiB-seconds per month."
+    - Memory: 4 GiB × 2,628,000 sec = 10,512,000 GiB-seconds
+      Free tier applied: -360,000 GiB-seconds
+      Billable: 10,152,000 GiB-seconds × $0.0000025 = $25.38/month
+    
+    💰 Total estimated: ~$147.20/month (free tier already applied)
+    
+    💡 Tip: Cloud Run's free tier (180,000 vCPU-sec + 360,000 GiB-sec/month) 
+       has been automatically deducted from your estimate."
 ```
 
 ### Explore Services and SKUs
@@ -280,18 +235,22 @@ You: "How much would an n2-standard-4 instance cost for 730 hours?"
 
 ### Any GCP Service
 
-Even services without pre-built guides work:
+All services work with dynamic guide generation:
 
 ```
 You: "How much would Vertex AI cost for my ML training?"
 
-AI: "I don't have a pre-built guide for Vertex AI, but I can help estimate costs.
-    To proceed, I need to know:
-    1. Region: Where will this be deployed?
-    2. Usage pattern: Training or prediction? What instance type?
-    3. Scale: How many hours of training? How many predictions?
+AI: "I'll generate an estimation guide for Vertex AI by analyzing available SKUs...
     
-    Would you like me to explore the available SKUs for Vertex AI?"
+    Based on my analysis, to estimate Vertex AI costs, I need:
+    1. Region: Where will training run?
+    2. Machine type: What accelerator type? (e.g., NVIDIA T4, A100)
+    3. Training hours: How long will training take?
+    4. Storage: How much training data?
+    
+    Free tier note: Vertex AI offers $300 in free credits for new users.
+    
+    Would you like me to list the specific SKUs available for Vertex AI?"
 ```
 
 ### Architecture Diagram Estimation (Multi-Service)
@@ -329,15 +288,17 @@ You: "Tokyo region, Cloud Run with 1vCPU/2GB × 2 instances running 24/7,
       Cloud SQL PostgreSQL db-custom-2-4096, 100GB SSD with HA,
       Cloud Storage 50GB Standard"
 
-AI: "Thank you! Here's your estimate:
+AI: "Thank you! Here's your estimate (free tiers automatically applied):
 
      | Service            | Configuration                  | Monthly Cost |
      |--------------------|--------------------------------|--------------|
-     | Cloud Run          | 2 × 1vCPU × 2GB (24/7)         | $152.42      |
+     | Cloud Run          | 2 × 1vCPU × 2GB (24/7)         | $147.20 ✨   |
      | Cloud SQL          | PostgreSQL, 2vCPU/4GB, 100GB HA| $178.50      |
-     | Cloud Storage      | 50GB Standard                  | $1.15        |
+     | Cloud Storage      | 50GB Standard                  | $0.00 ✨     |
      | Cloud Load Balancing| Base + traffic                | $18.00       |
-     | **Total**          |                                | **$350.07**  |
+     | **Total**          |                                | **$343.70**  |
+     
+     ✨ = Free tier applied
      
      💡 Cost Optimization Tips:
      - Cloud Run: Set min instances to 0 to reduce idle costs
@@ -387,75 +348,102 @@ For production or automated environments, use a service account:
 
 ## Architecture
 
-### Tool Design
+### Project Structure
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           MCP Server Tools                                  │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  ┌─────────────────────────┐                                                │
-│  │  get_estimation_guide   │ ◄── Entry point for cost estimation            │
-│  │  ─────────────────────  │     Returns: parameters, pricing factors, tips │
-│  │  • 17 detailed guides   │                                                │
-│  │  • Generic fallback     │                                                │
-│  └───────────┬─────────────┘                                                │
-│              │                                                              │
-│              ▼                                                              │
-│  ┌─────────────────────────┐     ┌─────────────────────────┐               │
-│  │     list_services       │────►│       list_skus         │               │
-│  │  ─────────────────────  │     │  ─────────────────────  │               │
-│  │  Returns: service IDs   │     │  Returns: SKU IDs,      │               │
-│  │  (e.g., 6F81-5844-456A) │     │  names, regions         │               │
-│  └─────────────────────────┘     └───────────┬─────────────┘               │
-│                                              │                              │
-│                                              ▼                              │
-│                              ┌─────────────────────────┐                    │
-│                              │     get_sku_price       │                    │
-│                              │  ─────────────────────  │                    │
-│                              │  Returns: price/unit,   │                    │
-│                              │  tiers, currency        │                    │
-│                              └───────────┬─────────────┘                    │
-│                                          │                                  │
-│                                          ▼                                  │
-│                              ┌─────────────────────────┐                    │
-│                              │     estimate_cost       │                    │
-│                              │  ─────────────────────  │                    │
-│                              │  Input: SKU ID, usage,  │                    │
-│                              │  region, description    │                    │
-│                              │  Returns: cost estimate │                    │
-│                              └─────────────────────────┘                    │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                       │
-                                       ▼
-                    ┌─────────────────────────────────────┐
-                    │   Google Cloud Billing API v2beta   │
-                    │   cloudbilling.googleapis.com       │
-                    └─────────────────────────────────────┘
+gcp-cost-mcp-server/
+├── main.go                      # Entry point, tool registration
+├── internal/
+│   ├── freetier/                # Free tier information retrieval
+│   │   ├── service.go           # FreeTierService with 24h cache
+│   │   ├── search.go            # DuckDuckGo search client
+│   │   ├── scraper.go           # GCP documentation scraper
+│   │   └── patterns.go          # Regex patterns for extraction
+│   ├── pricing/
+│   │   └── client.go            # Cloud Billing Catalog API client
+│   ├── tools/
+│   │   ├── get_estimation_guide.go  # Dynamic guide generator
+│   │   ├── estimate_cost.go         # Cost calc + free tier
+│   │   ├── list_services.go
+│   │   ├── list_skus.go
+│   │   └── get_sku_price.go
+│   └── mcp/
+│       └── server.go            # MCP server wrapper
+```
+
+### Tool Design
+
+```mermaid
+flowchart TB
+    subgraph MCP["MCP Server Tools"]
+        direction TB
+        
+        Guide["get_estimation_guide<br/>─────────────────<br/>• Dynamic SKU analysis<br/>• Free tier info included"]
+        
+        Services["list_services<br/>─────────────────<br/>Returns: service IDs"]
+        SKUs["list_skus<br/>─────────────────<br/>Returns: SKU IDs, regions"]
+        Price["get_sku_price<br/>─────────────────<br/>Returns: price/unit, tiers"]
+        Cost["estimate_cost<br/>─────────────────<br/>• Auto free tier deduction<br/>• Tiered pricing support"]
+        
+        Guide --> Services
+        Services --> SKUs
+        SKUs --> Price
+        Price --> Cost
+    end
+    
+    subgraph External["External Services"]
+        Billing["Google Cloud Billing API v2beta<br/>cloudbilling.googleapis.com"]
+        Docs["GCP Documentation<br/>(for free tier info)"]
+        DDG["DuckDuckGo Search<br/>(fallback for doc discovery)"]
+    end
+    
+    MCP --> Billing
+    Guide -.-> Docs
+    Guide -.-> DDG
 ```
 
 ### Data Flow
 
-1. **get_estimation_guide**: Provides a structured guide for what information to gather
-   - Detailed guides for 17 common services (Cloud Run, GKE, BigQuery, etc.)
-   - Generic template for any other GCP service
-   - Includes pricing factors, tips, and suggested questions
+```mermaid
+sequenceDiagram
+    participant User
+    participant AI as AI Assistant
+    participant MCP as MCP Server
+    participant API as Cloud Billing API
+    participant Docs as GCP Docs
+    
+    User->>AI: "How much would Cloud Run cost?"
+    AI->>MCP: get_estimation_guide("Cloud Run")
+    MCP->>API: ListSKUs(Cloud Run)
+    API-->>MCP: SKU list
+    MCP->>Docs: Fetch free tier info
+    Docs-->>MCP: Free tier data
+    MCP-->>AI: Dynamic guide + free tier
+    AI->>User: "I need: region, vCPU, memory..."
+    
+    User->>AI: "Tokyo, 1vCPU, 2GB, 24/7"
+    AI->>MCP: list_services()
+    MCP->>API: ListServices
+    API-->>MCP: Service IDs
+    AI->>MCP: list_skus(service_id)
+    MCP->>API: ListSKUs
+    API-->>MCP: SKU details
+    AI->>MCP: estimate_cost(sku_id, usage)
+    MCP->>MCP: Apply free tier deduction
+    MCP-->>AI: Cost with free tier applied
+    AI->>User: "Estimated: $147.20/month (free tier applied)"
+```
 
-2. **list_services**: Queries the Cloud Billing API for all available services
-   - Returns service IDs needed to query SKUs
+### Key Components
 
-3. **list_skus**: Lists SKUs for a specific service
-   - Filterable by region and category
-   - Returns SKU IDs needed for pricing queries
-
-4. **get_sku_price**: Gets detailed pricing for a specific SKU
-   - Supports multiple currencies (USD, JPY, EUR, etc.)
-   - Returns tiered pricing information
-
-5. **estimate_cost**: Calculates the final cost estimate
-   - Takes SKU ID, usage amount, and context (service name, region, description)
-   - Handles tiered pricing calculations
+| Component | Description |
+|-----------|-------------|
+| **get_estimation_guide** | Dynamically generates guides by analyzing SKUs from Cloud Billing API. Includes free tier information fetched from GCP documentation. |
+| **list_services** | Queries the Cloud Billing API for all available services. Returns service IDs needed to query SKUs. |
+| **list_skus** | Lists SKUs for a specific service. Filterable by region and category. |
+| **get_sku_price** | Gets detailed pricing for a specific SKU. Supports multiple currencies (USD, JPY, EUR, etc.). |
+| **estimate_cost** | Calculates final cost with automatic free tier deduction. Handles tiered pricing calculations. |
+| **FreeTierService** | Fetches free tier information via DuckDuckGo search + GCP doc scraping. Caches results for 24 hours. |
 
 ---
 
@@ -465,6 +453,16 @@ For production or automated environments, use a service account:
 
 ```bash
 go build -o gcp-cost-mcp-server .
+```
+
+### Test
+
+```bash
+# Run all tests
+go test -v ./...
+
+# With coverage
+go test -cover ./...
 ```
 
 ### Test with MCP Inspector
@@ -487,6 +485,40 @@ GOOS=linux GOARCH=amd64 go build -o dist/gcp-cost-mcp-server-linux-amd64 .
 
 # Windows (x86_64)
 GOOS=windows GOARCH=amd64 go build -o dist/gcp-cost-mcp-server-windows-amd64.exe .
+```
+
+### Release Process
+
+Releases are automated via [GoReleaser](https://goreleaser.com/) and GitHub Actions.
+
+**To create a new release:**
+
+```bash
+# 1. Create and push a tag
+git tag v0.6.0
+git push origin v0.6.0
+```
+
+This will automatically:
+1. Build binaries for all platforms (darwin/linux/windows, amd64/arm64)
+2. Create a GitHub Release with changelog
+3. Update the [homebrew-tap](https://github.com/nozomi-koborinai/homebrew-tap) Formula
+
+**Prerequisites for homebrew-tap automation:**
+- A GitHub Personal Access Token (PAT) with `repo` scope
+- Store it as `HOMEBREW_TAP_TOKEN` in repository secrets
+
+### Local Development
+
+```bash
+# Build
+go build -o gcp-cost-mcp-server .
+
+# Run locally
+./gcp-cost-mcp-server
+
+# Test GoReleaser config (dry run)
+goreleaser release --snapshot --clean
 ```
 
 ## Why Genkit for Go?
@@ -533,44 +565,6 @@ The same tool definitions work as:
 - HTTP API endpoints (via `genkit.Handler`)
 
 For more details, see the [Genkit MCP Plugin documentation](https://github.com/firebase/genkit/tree/main/go/plugins/mcp).
-
----
-
-## Development
-
-### Release Process
-
-Releases are automated via [GoReleaser](https://goreleaser.com/) and GitHub Actions.
-
-**To create a new release:**
-
-```bash
-# 1. Create and push a tag
-git tag v0.6.0
-git push origin v0.6.0
-```
-
-This will automatically:
-1. Build binaries for all platforms (darwin/linux/windows, amd64/arm64)
-2. Create a GitHub Release with changelog
-3. Update the [homebrew-tap](https://github.com/nozomi-koborinai/homebrew-tap) Formula
-
-**Prerequisites for homebrew-tap automation:**
-- A GitHub Personal Access Token (PAT) with `repo` scope
-- Store it as `HOMEBREW_TAP_TOKEN` in repository secrets
-
-### Local Development
-
-```bash
-# Build
-go build -o gcp-cost-mcp-server .
-
-# Run locally
-./gcp-cost-mcp-server
-
-# Test GoReleaser config (dry run)
-goreleaser release --snapshot --clean
-```
 
 ## License
 
