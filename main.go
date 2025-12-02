@@ -29,6 +29,7 @@ import (
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/mcp"
+	"github.com/nozomi-koborinai/gcp-cost-mcp-server/internal/freetier"
 	"github.com/nozomi-koborinai/gcp-cost-mcp-server/internal/pricing"
 	"github.com/nozomi-koborinai/gcp-cost-mcp-server/internal/tools"
 )
@@ -52,13 +53,17 @@ func main() {
 		log.Fatalf("Failed to create Pricing API client: %v", err)
 	}
 
+	// Create FreeTierService for free tier information retrieval
+	freeTierService := freetier.NewService()
+	log.Println("FreeTierService initialized with 24h cache TTL")
+
 	// Define tools
 	toolList := []ai.Tool{
-		tools.NewGetEstimationGuide(g), // Should be called first to understand requirements
+		tools.NewGetEstimationGuide(g, pricingClient, freeTierService), // Should be called first to understand requirements
 		tools.NewListServices(g, pricingClient),
 		tools.NewListSKUs(g, pricingClient),
 		tools.NewGetSKUPrice(g, pricingClient),
-		tools.NewEstimateCost(g, pricingClient),
+		tools.NewEstimateCost(g, pricingClient), // Free tier auto-apply will be added in PR #8
 	}
 
 	// Log registered tools

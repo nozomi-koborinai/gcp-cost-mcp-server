@@ -20,6 +20,18 @@ const (
 	DefaultPageSize = 5000
 )
 
+// PricingClient defines the interface for pricing operations.
+// This interface allows for mocking in tests.
+type PricingClient interface {
+	ListServices(ctx context.Context, pageSize int, pageToken string) (*ListServicesResponse, error)
+	ListSKUs(ctx context.Context, serviceID string, pageSize int, pageToken string) (*ListSKUsResponse, error)
+	GetSKUPrice(ctx context.Context, skuID string, currencyCode string) (*GetPriceResponse, error)
+	CalculateCost(rate *Rate, usageAmount float64) (float64, error)
+}
+
+// Ensure Client implements PricingClient interface
+var _ PricingClient = (*Client)(nil)
+
 // Client is a client for the Google Cloud Billing Pricing API
 type Client struct {
 	httpClient *http.Client
