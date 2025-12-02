@@ -63,7 +63,7 @@ func main() {
 		tools.NewListServices(g, pricingClient),
 		tools.NewListSKUs(g, pricingClient),
 		tools.NewGetSKUPrice(g, pricingClient),
-		tools.NewEstimateCost(g, pricingClient), // Free tier auto-apply will be added in PR #8
+		tools.NewEstimateCost(g, pricingClient, freeTierService), // Now includes free tier auto-apply
 	}
 
 	// Log registered tools
