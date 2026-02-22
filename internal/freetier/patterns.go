@@ -191,16 +191,21 @@ func ExtractScope(content string) string {
 func ExtractPeriod(content string) string {
 	contentLower := strings.ToLower(content)
 
-	if strings.Contains(contentLower, "per day") ||
-		strings.Contains(contentLower, "daily") ||
-		strings.Contains(contentLower, "/day") {
-		return "day"
-	}
-
 	if strings.Contains(contentLower, "always free") {
 		return "always"
 	}
 
-	// Default to month as most GCP free tiers are monthly
+	monthCount := strings.Count(contentLower, "per month") +
+		strings.Count(contentLower, "/month") +
+		strings.Count(contentLower, "monthly")
+
+	dayCount := strings.Count(contentLower, "per day") +
+		strings.Count(contentLower, "/day") +
+		strings.Count(contentLower, "daily")
+
+	if dayCount > 0 && dayCount > monthCount {
+		return "day"
+	}
+
 	return "month"
 }

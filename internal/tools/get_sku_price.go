@@ -23,14 +23,25 @@ type PricingTier struct {
 	Currency     string  `json:"currency"`
 }
 
+// ConsumptionPricing represents pricing for a specific consumption model (e.g., on-demand, CUD)
+type ConsumptionPricing struct {
+	ConsumptionModel string        `json:"consumption_model"`
+	Description      string        `json:"description,omitempty"`
+	Unit             string        `json:"unit"`
+	UnitDescription  string        `json:"unit_description"`
+	Tiers            []PricingTier `json:"tiers"`
+	AggregationInfo  string        `json:"aggregation_info,omitempty"`
+}
+
 // PriceInfo represents pricing information
 type PriceInfo struct {
-	SKUID           string        `json:"sku_id"`
-	CurrencyCode    string        `json:"currency_code"`
-	Unit            string        `json:"unit"`
-	UnitDescription string        `json:"unit_description"`
-	Tiers           []PricingTier `json:"tiers"`
-	AggregationInfo string        `json:"aggregation_info,omitempty"`
+	SKUID              string               `json:"sku_id"`
+	CurrencyCode       string               `json:"currency_code"`
+	Unit               string               `json:"unit"`
+	UnitDescription    string               `json:"unit_description"`
+	Tiers              []PricingTier         `json:"tiers"`
+	AggregationInfo    string               `json:"aggregation_info,omitempty"`
+	AllPricingModels   []ConsumptionPricing  `json:"all_pricing_models,omitempty"`
 }
 
 // GetSKUPriceOutput is the output of the get_sku_price tool
@@ -51,7 +62,6 @@ func NewGetSKUPrice(g *genkit.Genkit, client *pricing.Client) ai.Tool {
 				return nil, fmt.Errorf("sku_id is required")
 			}
 
-			// Default to USD if not specified
 			currencyCode := input.CurrencyCode
 			if currencyCode == "" {
 				currencyCode = "USD"
@@ -66,35 +76,56 @@ func NewGetSKUPrice(g *genkit.Genkit, client *pricing.Client) ai.Tool {
 			priceInfo := PriceInfo{
 				SKUID:        input.SKUID,
 				CurrencyCode: resp.CurrencyCode,
-				Tiers:        []PricingTier{}, // Initialize as empty slice to avoid null in JSON
+				Tiers:        []PricingTier{},
 			}
 
-			// Extract rate from the first SKUPrice entry (typically "Default" consumption model)
-			if len(resp.SKUPrices) > 0 && resp.SKUPrices[0].Rate != nil {
-				rate := resp.SKUPrices[0].Rate
-				priceInfo.Unit = rate.UnitInfo.Unit
-				priceInfo.UnitDescription = rate.UnitInfo.UnitDescription
+			var allModels []ConsumptionPricing
 
-				// Build aggregation info string
+			for idx, skuPrice := range resp.SKUPrices {
+				if skuPrice.Rate == nil {
+					continue
+				}
+				rate := skuPrice.Rate
+
+				model := ConsumptionPricing{
+					ConsumptionModel: skuPrice.ConsumptionModel,
+					Description:      skuPrice.ConsumptionModelDescription,
+					Unit:             rate.UnitInfo.Unit,
+					UnitDescription:  rate.UnitInfo.UnitDescription,
+					Tiers:            []PricingTier{},
+				}
+
 				if rate.AggregationInfo.Level != "" || rate.AggregationInfo.Interval != "" {
-					priceInfo.AggregationInfo = fmt.Sprintf("%s / %s",
+					model.AggregationInfo = fmt.Sprintf("%s / %s",
 						rate.AggregationInfo.Level,
 						rate.AggregationInfo.Interval)
 				}
 
-				// Convert tiers
 				for _, tier := range rate.Tiers {
 					startAmount, _ := strconv.ParseFloat(tier.StartAmount.Value, 64)
 					units, _ := strconv.ParseFloat(tier.ListPrice.Units, 64)
 					nanos := float64(tier.ListPrice.Nanos) / 1e9
 					pricePerUnit := units + nanos
 
-					priceInfo.Tiers = append(priceInfo.Tiers, PricingTier{
+					model.Tiers = append(model.Tiers, PricingTier{
 						StartAmount:  startAmount,
 						PricePerUnit: pricePerUnit,
 						Currency:     tier.ListPrice.CurrencyCode,
 					})
 				}
+
+				allModels = append(allModels, model)
+
+				if idx == 0 {
+					priceInfo.Unit = rate.UnitInfo.Unit
+					priceInfo.UnitDescription = rate.UnitInfo.UnitDescription
+					priceInfo.AggregationInfo = model.AggregationInfo
+					priceInfo.Tiers = model.Tiers
+				}
+			}
+
+			if len(allModels) > 0 {
+				priceInfo.AllPricingModels = allModels
 			}
 
 			return &GetSKUPriceOutput{

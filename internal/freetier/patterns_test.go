@@ -215,6 +215,35 @@ func TestExtractPeriod(t *testing.T) {
 			content:  "First 5 GB of storage is free.",
 			expected: "month",
 		},
+		{
+			name: "Month dominant with some daily mentions (Cloud Run regression)",
+			content: `Cloud Run pricing:
+				180,000 vCPU-seconds per month free.
+				360,000 GiB-seconds per month free.
+				2 million requests per month free.
+				Daily usage is metered and billed monthly.`,
+			expected: "month",
+		},
+		{
+			name: "Equal month and day mentions defaults to month",
+			content: "Free tier: 1000 reads per day and 10 GB storage per month.",
+			expected: "month",
+		},
+		{
+			name:     "Day dominant",
+			content:  "50,000 reads per day and 20,000 writes per day are free. Billed daily.",
+			expected: "day",
+		},
+		{
+			name:     "Slash notation month",
+			content:  "Free tier: 1 TB/month of query processing.",
+			expected: "month",
+		},
+		{
+			name:     "Slash notation day",
+			content:  "10,000 operations/day free.",
+			expected: "day",
+		},
 	}
 
 	for _, tt := range tests {
