@@ -20,34 +20,35 @@ Instead of manually using the [Google Cloud Pricing Calculator](https://cloud.go
 | `get_sku_price` | Gets pricing details for a specific SKU |
 | `estimate_cost` | Calculates cost based on SKU and usage amount, **with automatic free tier deduction** |
 
-### Recommended Workflow
+### Tool Relationships
 
-The tools are designed to work together in a conversational flow:
-
-#### Single Service Estimation
+Each tool is **independent and stateless**. AI assistants autonomously decide which tools to call and in what order based on context:
 
 ```mermaid
-flowchart TD
-    A["User: How much would Cloud Run cost for my application?"] --> B
-    B["Step 1: get_estimation_guide('Cloud Run')"] --> C
-    C["Returns: required parameters, pricing factors,<br/>free tier info, tips"] --> D
-    D["Step 2: AI asks user for details<br/>- Region (e.g., asia-northeast1)<br/>- vCPU and memory per instance<br/>- Number of instances<br/>- Expected monthly usage hours"] --> E
-    E["Step 3: list_services → list_skus<br/>Find the correct SKU IDs"] --> F
-    F["Step 4: estimate_cost(sku_id, usage_amount, ...)<br/>Calculate cost with free tier auto-deduction"] --> G
-    G["Return: Cost estimate with free tier applied"]
+graph TB
+    guide["get_estimation_guide<br/>─────────────────<br/>IN: service_name<br/>OUT: required params, pricing<br/>factors, free tier info, tips<br/>─────────────────<br/>Internally resolves<br/>service &amp; SKU lookup"]
+
+    services["list_services<br/>─────────────────<br/>IN: name filter (opt)<br/>OUT: service_id, display_name"]
+
+    skus["list_skus<br/>─────────────────<br/>IN: service_id, region, keyword<br/>OUT: sku_id, display_name,<br/>categories, regions"]
+
+    price["get_sku_price<br/>─────────────────<br/>IN: sku_id, currency<br/>OUT: price/unit, pricing tiers"]
+
+    cost["estimate_cost<br/>─────────────────<br/>IN: sku_id, usage_amount<br/>OUT: estimated cost with<br/>automatic free tier deduction<br/>─────────────────<br/>Internally resolves pricing"]
+
+    services -- "service_id" --> skus
+    skus -- "sku_id" --> price
+    skus -- "sku_id" --> cost
 ```
 
-#### Architecture Diagram Estimation (Multi-Service)
+> **Solid arrows** show data flow — one tool's output feeds another's input. `get_estimation_guide` and `estimate_cost` are **self-contained**: they internally resolve their own dependencies, reducing round-trips.
 
-```mermaid
-flowchart TD
-    A["User: [Uploads architecture diagram]<br/>'Please estimate the monthly cost'"] --> B
-    B["Step 1: AI analyzes the diagram<br/>Identifies: Cloud Run, Cloud SQL,<br/>Cloud Storage, Load Balancing"] --> C
-    C["Step 2: get_estimation_guide for EACH service<br/>Collect all required parameters"] --> D
-    D["Step 3: AI asks user for details (grouped)<br/>Region, vCPU/memory, DB type, storage..."] --> E
-    E["Step 4: For EACH service:<br/>list_services → list_skus → estimate_cost"] --> F
-    F["Step 5: Present consolidated results<br/>| Service | Config | Cost |<br/>+ Total + Optimization tips"]
-```
+| Use Case | How AI Uses the Tools |
+|----------|----------------------|
+| **Quick estimate** | `get_estimation_guide` → gather user requirements → `estimate_cost` |
+| **Multi-service** | Multiple `get_estimation_guide` + `estimate_cost` calls **in parallel** |
+| **Explore pricing** | `list_services` → `list_skus` → `get_sku_price` |
+| **Direct calculation** | `estimate_cost` with a known SKU ID |
 
 ### Supported Services
 
@@ -377,29 +378,30 @@ gcp-cost-mcp-server/
 flowchart TB
     subgraph MCP["MCP Server Tools"]
         direction TB
-        
-        Guide["get_estimation_guide<br/>─────────────────<br/>• Dynamic SKU analysis<br/>• Free tier info included"]
-        
+
+        Guide["get_estimation_guide<br/>─────────────────<br/>• Dynamic SKU analysis<br/>• Free tier info included<br/>• Self-contained"]
+
         Services["list_services<br/>─────────────────<br/>Returns: service IDs"]
         SKUs["list_skus<br/>─────────────────<br/>Returns: SKU IDs, regions"]
         Price["get_sku_price<br/>─────────────────<br/>Returns: price/unit, tiers"]
-        Cost["estimate_cost<br/>─────────────────<br/>• Auto free tier deduction<br/>• Tiered pricing support"]
-        
-        Guide --> Services
+        Cost["estimate_cost<br/>─────────────────<br/>• Auto free tier deduction<br/>• Tiered pricing support<br/>• Self-contained"]
+
         Services --> SKUs
         SKUs --> Price
-        Price --> Cost
+        SKUs --> Cost
     end
-    
+
     subgraph External["External Services"]
         Billing["Google Cloud Billing API v2beta<br/>cloudbilling.googleapis.com"]
         Docs["GCP Documentation<br/>(for free tier info)"]
         DDG["DuckDuckGo Search<br/>(fallback for doc discovery)"]
     end
-    
+
     MCP --> Billing
     Guide -.-> Docs
     Guide -.-> DDG
+    Cost -.-> Docs
+    Cost -.-> DDG
 ```
 
 ### Data Flow
