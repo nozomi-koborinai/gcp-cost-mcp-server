@@ -34,13 +34,13 @@ type ConsumptionPricing struct {
 
 // PriceInfo represents pricing information
 type PriceInfo struct {
-	SKUID              string               `json:"sku_id"`
-	CurrencyCode       string               `json:"currency_code"`
-	Unit               string               `json:"unit"`
-	UnitDescription    string               `json:"unit_description"`
-	Tiers              []PricingTier         `json:"tiers"`
-	AggregationInfo    string               `json:"aggregation_info,omitempty"`
-	AllPricingModels   []ConsumptionPricing  `json:"all_pricing_models,omitempty"`
+	SKUID            string               `json:"sku_id"`
+	CurrencyCode     string               `json:"currency_code"`
+	Unit             string               `json:"unit"`
+	UnitDescription  string               `json:"unit_description"`
+	Tiers            []PricingTier        `json:"tiers"`
+	AggregationInfo  string               `json:"aggregation_info,omitempty"`
+	AllPricingModels []ConsumptionPricing `json:"all_pricing_models,omitempty"`
 }
 
 // GetSKUPriceOutput is the output of the get_sku_price tool
