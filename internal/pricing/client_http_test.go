@@ -143,3 +143,51 @@ func TestClient_GetSKUPrice_EmptySKUID(t *testing.T) {
 		t.Fatal("GetSKUPrice should return error when skuID is empty")
 	}
 }
+
+func TestClient_ListAllServices_Pagination(t *testing.T) {
+	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("pageToken") {
+		case "":
+			w.Write([]byte(`{"services":[{"serviceId":"S1","displayName":"Service One"}],"nextPageToken":"page2"}`))
+		case "page2":
+			w.Write([]byte(`{"services":[{"serviceId":"S2","displayName":"Service Two"}]}`))
+		default:
+			t.Errorf("unexpected pageToken %q", r.URL.Query().Get("pageToken"))
+		}
+	}))
+
+	services, err := client.ListAllServices(context.Background())
+	if err != nil {
+		t.Fatalf("ListAllServices returned error: %v", err)
+	}
+	if len(services) != 2 {
+		t.Fatalf("len(services) = %d, want 2", len(services))
+	}
+	if services[0].ServiceID != "S1" || services[1].ServiceID != "S2" {
+		t.Errorf("unexpected services: %+v", services)
+	}
+}
+
+func TestClient_ListAllSKUs_Pagination(t *testing.T) {
+	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("pageToken") {
+		case "":
+			w.Write([]byte(`{"skus":[{"skuId":"K1","displayName":"SKU One"}],"nextPageToken":"page2"}`))
+		case "page2":
+			w.Write([]byte(`{"skus":[{"skuId":"K2","displayName":"SKU Two"}]}`))
+		default:
+			t.Errorf("unexpected pageToken %q", r.URL.Query().Get("pageToken"))
+		}
+	}))
+
+	skus, err := client.ListAllSKUs(context.Background(), "6F81-5844-456A")
+	if err != nil {
+		t.Fatalf("ListAllSKUs returned error: %v", err)
+	}
+	if len(skus) != 2 {
+		t.Fatalf("len(skus) = %d, want 2", len(skus))
+	}
+	if skus[0].SKUID != "K1" || skus[1].SKUID != "K2" {
+		t.Errorf("unexpected skus: %+v", skus)
+	}
+}

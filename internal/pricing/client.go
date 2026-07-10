@@ -275,6 +275,42 @@ func (c *Client) GetSKUPrice(ctx context.Context, skuID string, currencyCode str
 	return &result, nil
 }
 
+// ListAllServices lists all publicly available Google Cloud services,
+// following pagination until every page has been fetched.
+func (c *Client) ListAllServices(ctx context.Context) ([]Service, error) {
+	var all []Service
+	pageToken := ""
+	for {
+		resp, err := c.ListServices(ctx, DefaultPageSize, pageToken)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, resp.Services...)
+		if resp.NextPageToken == "" {
+			return all, nil
+		}
+		pageToken = resp.NextPageToken
+	}
+}
+
+// ListAllSKUs lists all SKUs for a specific service, following pagination
+// until every page has been fetched.
+func (c *Client) ListAllSKUs(ctx context.Context, serviceID string) ([]SKU, error) {
+	var all []SKU
+	pageToken := ""
+	for {
+		resp, err := c.ListSKUs(ctx, serviceID, DefaultPageSize, pageToken)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, resp.SKUs...)
+		if resp.NextPageToken == "" {
+			return all, nil
+		}
+		pageToken = resp.NextPageToken
+	}
+}
+
 // CalculateCost calculates the estimated cost based on usage amount and pricing tiers
 func (c *Client) CalculateCost(rate *Rate, usageAmount float64) (float64, error) {
 	if rate == nil {
