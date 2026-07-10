@@ -52,6 +52,33 @@ func NewClient(ctx context.Context) (*Client, error) {
 	}, nil
 }
 
+// getJSON performs an authenticated GET request and decodes the JSON
+// response into out. Non-200 responses are returned as errors including
+// the response body.
+func (c *Client) getJSON(ctx context.Context, reqURL string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return nil
+}
+
 // Service represents a Google Cloud service
 type Service struct {
 	Name        string `json:"name"`
@@ -192,27 +219,10 @@ func (c *Client) ListServices(ctx context.Context, pageSize int, pageToken strin
 
 	reqURL := fmt.Sprintf("%s/v2beta/services?%s", c.baseURL, params.Encode())
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
 	var result ListServicesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	if err := c.getJSON(ctx, reqURL, &result); err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
@@ -235,27 +245,10 @@ func (c *Client) ListSKUs(ctx context.Context, serviceID string, pageSize int, p
 
 	reqURL := fmt.Sprintf("%s/v2beta/skus?%s", c.baseURL, params.Encode())
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
 	var result ListSKUsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	if err := c.getJSON(ctx, reqURL, &result); err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
@@ -275,27 +268,10 @@ func (c *Client) GetSKUPrice(ctx context.Context, skuID string, currencyCode str
 		reqURL = fmt.Sprintf("%s?%s", reqURL, params.Encode())
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
 	var result GetPriceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	if err := c.getJSON(ctx, reqURL, &result); err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
