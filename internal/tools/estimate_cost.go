@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -49,12 +50,7 @@ type EstimateCostOutput struct {
 	Estimate CostBreakdown `json:"estimate"`
 }
 
-// NewEstimateCost creates a tool that estimates the cost based on usage
-func NewEstimateCost(g *genkit.Genkit, client *pricing.Client, freeTierService *freetier.Service) ai.Tool {
-	return genkit.DefineTool(
-		g,
-		"estimate_cost",
-		`Estimates the cost for a specific SKU based on usage amount. 
+const estimateCostDescription = `Estimates the cost for a specific SKU based on usage amount. 
 Automatically applies free tier deductions when available and takes into account tiered pricing.
 
 === FREE TIER HANDLING ===
@@ -89,138 +85,149 @@ When estimating costs for multiple services (e.g., from an architecture diagram)
 - DO NOT call this tool until you have gathered sufficient information from the user
 - ALWAYS include service_name, region, and description parameters to track what each estimate covers
 - For multi-service estimates, track each call and calculate the total at the end
-- Note: Free tiers are typically per billing account, not per project`,
+- Note: Free tiers are typically per billing account, not per project`
+
+// NewEstimateCost creates a tool that estimates the cost based on usage
+func NewEstimateCost(g *genkit.Genkit, client PricingClient, freeTierService FreeTierProvider) ai.Tool {
+	return genkit.DefineTool(
+		g,
+		"estimate_cost",
+		estimateCostDescription,
 		func(ctx *ai.ToolContext, input EstimateCostInput) (*EstimateCostOutput, error) {
-			log.Printf("Tool 'estimate_cost' called for sku_id: %s, usage: %f", input.SKUID, input.UsageAmount)
-
-			if input.SKUID == "" {
-				return nil, fmt.Errorf("sku_id is required")
-			}
-
-			if input.UsageAmount < 0 {
-				return nil, fmt.Errorf("usage_amount must be non-negative")
-			}
-
-			// Default to USD if not specified
-			currencyCode := input.CurrencyCode
-			if currencyCode == "" {
-				currencyCode = "USD"
-			}
-
-			// Get the price for this SKU
-			priceResp, err := client.GetSKUPrice(ctx.Context, input.SKUID, currencyCode)
-			if err != nil {
-				log.Printf("Error getting SKU price: %v", err)
-				return nil, fmt.Errorf("failed to get SKU price: %w", err)
-			}
-
-			// Extract rate from the first SKUPrice entry
-			if len(priceResp.SKUPrices) == 0 || priceResp.SKUPrices[0].Rate == nil {
-				return nil, fmt.Errorf("no pricing data available for SKU %s", input.SKUID)
-			}
-			rate := priceResp.SKUPrices[0].Rate
-
-			// Track original usage for reporting
-			totalUsage := input.UsageAmount
-			billableUsage := input.UsageAmount
-			var freeTierApplied float64
-			var freeTierNote string
-			var freeTierSourceURL string
-
-			// Try to get and apply free tier information (Issue #8)
-			if freeTierService != nil && input.ServiceName != "" {
-				freeTierInfo, err := freeTierService.GetFreeTier(ctx.Context, input.ServiceName)
-				if err == nil && freeTierInfo != nil {
-					// Find matching free tier item for this SKU's usage unit
-					matchingItem := freetier.FindMatchingFreeTierItem(freeTierInfo, rate.UnitInfo.Unit)
-					if matchingItem != nil {
-						// Calculate free tier deduction
-						freeTierApplied = min(totalUsage, matchingItem.Amount)
-						billableUsage = max(0, totalUsage-matchingItem.Amount)
-
-						freeTierNote = fmt.Sprintf(
-							"Free tier applied: %.0f %s (%s, %s)",
-							matchingItem.Amount,
-							matchingItem.Resource,
-							freeTierInfo.Scope,
-							freeTierInfo.Period,
-						)
-						freeTierSourceURL = freeTierInfo.SourceURL
-
-						log.Printf("Free tier applied for %s: %.0f %s deducted, billable: %.0f",
-							input.ServiceName, freeTierApplied, matchingItem.Resource, billableUsage)
-					}
-				}
-			}
-
-			// Calculate the cost based on billable usage (after free tier deduction)
-			estimatedCost, err := pricing.CalculateCost(rate, billableUsage)
-			if err != nil {
-				log.Printf("Error calculating cost: %v", err)
-				return nil, fmt.Errorf("failed to calculate cost: %w", err)
-			}
-
-			// Prepare output
-			estimate := CostBreakdown{
-				SKUID:         input.SKUID,
-				UsageAmount:   totalUsage,
-				EstimatedCost: estimatedCost,
-				CurrencyCode:  currencyCode,
-				Unit:          rate.UnitInfo.Unit,
-				NumberOfTiers: len(rate.Tiers),
-				TieredPricing: len(rate.Tiers) > 1,
-				// Include context from input
-				ServiceName: input.ServiceName,
-				Region:      input.Region,
-				Description: input.Description,
-				// Free tier information
-				TotalUsage:        totalUsage,
-				FreeTierApplied:   freeTierApplied,
-				BillableUsage:     billableUsage,
-				FreeTierNote:      freeTierNote,
-				FreeTierSourceURL: freeTierSourceURL,
-			}
-
-			// Calculate average price per unit for display (based on billable usage)
-			if billableUsage > 0 {
-				estimate.PricePerUnit = estimatedCost / billableUsage
-			} else if len(rate.Tiers) > 0 {
-				// Use first tier price if no billable usage
-				tier := rate.Tiers[0]
-				estimate.PricePerUnit = float64(tier.ListPrice.Nanos) / 1e9
-			}
-
-			// Create cost breakdown description
-			var breakdownDesc string
-			if freeTierApplied > 0 {
-				breakdownDesc = fmt.Sprintf(
-					"Total usage: %.2f %s. Free tier deducted: %.2f %s. Billable usage: %.2f %s. ",
-					totalUsage, estimate.Unit,
-					freeTierApplied, estimate.Unit,
-					billableUsage, estimate.Unit,
-				)
-			}
-
-			if estimate.TieredPricing {
-				breakdownDesc += fmt.Sprintf(
-					"Calculated using %d pricing tiers. Estimated cost: %.6f %s",
-					estimate.NumberOfTiers,
-					estimatedCost,
-					currencyCode,
-				)
-			} else {
-				breakdownDesc += fmt.Sprintf(
-					"Flat rate: %.6f %s per unit = %.6f %s",
-					estimate.PricePerUnit,
-					currencyCode,
-					estimatedCost,
-					currencyCode,
-				)
-			}
-			estimate.CostBreakdown = breakdownDesc
-
-			return &EstimateCostOutput{
-				Estimate: estimate,
-			}, nil
+			return runEstimateCost(ctx.Context, client, freeTierService, input)
 		})
+}
+
+func runEstimateCost(ctx context.Context, client PricingClient, freeTierService FreeTierProvider, input EstimateCostInput) (*EstimateCostOutput, error) {
+	log.Printf("Tool 'estimate_cost' called for sku_id: %s, usage: %f", input.SKUID, input.UsageAmount)
+
+	if input.SKUID == "" {
+		return nil, fmt.Errorf("sku_id is required")
+	}
+
+	if input.UsageAmount < 0 {
+		return nil, fmt.Errorf("usage_amount must be non-negative")
+	}
+
+	// Default to USD if not specified
+	currencyCode := input.CurrencyCode
+	if currencyCode == "" {
+		currencyCode = "USD"
+	}
+
+	// Get the price for this SKU
+	priceResp, err := client.GetSKUPrice(ctx, input.SKUID, currencyCode)
+	if err != nil {
+		log.Printf("Error getting SKU price: %v", err)
+		return nil, fmt.Errorf("failed to get SKU price: %w", err)
+	}
+
+	// Extract rate from the first SKUPrice entry
+	if len(priceResp.SKUPrices) == 0 || priceResp.SKUPrices[0].Rate == nil {
+		return nil, fmt.Errorf("no pricing data available for SKU %s", input.SKUID)
+	}
+	rate := priceResp.SKUPrices[0].Rate
+
+	// Track original usage for reporting
+	totalUsage := input.UsageAmount
+	billableUsage := input.UsageAmount
+	var freeTierApplied float64
+	var freeTierNote string
+	var freeTierSourceURL string
+
+	// Try to get and apply free tier information (Issue #8)
+	if freeTierService != nil && input.ServiceName != "" {
+		freeTierInfo, err := freeTierService.GetFreeTier(ctx, input.ServiceName)
+		if err == nil && freeTierInfo != nil {
+			// Find matching free tier item for this SKU's usage unit
+			matchingItem := freetier.FindMatchingFreeTierItem(freeTierInfo, rate.UnitInfo.Unit)
+			if matchingItem != nil {
+				// Calculate free tier deduction
+				freeTierApplied = min(totalUsage, matchingItem.Amount)
+				billableUsage = max(0, totalUsage-matchingItem.Amount)
+
+				freeTierNote = fmt.Sprintf(
+					"Free tier applied: %.0f %s (%s, %s)",
+					matchingItem.Amount,
+					matchingItem.Resource,
+					freeTierInfo.Scope,
+					freeTierInfo.Period,
+				)
+				freeTierSourceURL = freeTierInfo.SourceURL
+
+				log.Printf("Free tier applied for %s: %.0f %s deducted, billable: %.0f",
+					input.ServiceName, freeTierApplied, matchingItem.Resource, billableUsage)
+			}
+		}
+	}
+
+	// Calculate the cost based on billable usage (after free tier deduction)
+	estimatedCost, err := pricing.CalculateCost(rate, billableUsage)
+	if err != nil {
+		log.Printf("Error calculating cost: %v", err)
+		return nil, fmt.Errorf("failed to calculate cost: %w", err)
+	}
+
+	// Prepare output
+	estimate := CostBreakdown{
+		SKUID:         input.SKUID,
+		UsageAmount:   totalUsage,
+		EstimatedCost: estimatedCost,
+		CurrencyCode:  currencyCode,
+		Unit:          rate.UnitInfo.Unit,
+		NumberOfTiers: len(rate.Tiers),
+		TieredPricing: len(rate.Tiers) > 1,
+		// Include context from input
+		ServiceName: input.ServiceName,
+		Region:      input.Region,
+		Description: input.Description,
+		// Free tier information
+		TotalUsage:        totalUsage,
+		FreeTierApplied:   freeTierApplied,
+		BillableUsage:     billableUsage,
+		FreeTierNote:      freeTierNote,
+		FreeTierSourceURL: freeTierSourceURL,
+	}
+
+	// Calculate average price per unit for display (based on billable usage)
+	if billableUsage > 0 {
+		estimate.PricePerUnit = estimatedCost / billableUsage
+	} else if len(rate.Tiers) > 0 {
+		// Use first tier price if no billable usage
+		tier := rate.Tiers[0]
+		estimate.PricePerUnit = float64(tier.ListPrice.Nanos) / 1e9
+	}
+
+	// Create cost breakdown description
+	var breakdownDesc string
+	if freeTierApplied > 0 {
+		breakdownDesc = fmt.Sprintf(
+			"Total usage: %.2f %s. Free tier deducted: %.2f %s. Billable usage: %.2f %s. ",
+			totalUsage, estimate.Unit,
+			freeTierApplied, estimate.Unit,
+			billableUsage, estimate.Unit,
+		)
+	}
+
+	if estimate.TieredPricing {
+		breakdownDesc += fmt.Sprintf(
+			"Calculated using %d pricing tiers. Estimated cost: %.6f %s",
+			estimate.NumberOfTiers,
+			estimatedCost,
+			currencyCode,
+		)
+	} else {
+		breakdownDesc += fmt.Sprintf(
+			"Flat rate: %.6f %s per unit = %.6f %s",
+			estimate.PricePerUnit,
+			currencyCode,
+			estimatedCost,
+			currencyCode,
+		)
+	}
+	estimate.CostBreakdown = breakdownDesc
+
+	return &EstimateCostOutput{
+		Estimate: estimate,
+	}, nil
 }
