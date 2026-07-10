@@ -9,7 +9,6 @@ import (
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/nozomi-koborinai/gcp-cost-mcp-server/internal/freetier"
-	"github.com/nozomi-koborinai/gcp-cost-mcp-server/internal/pricing"
 )
 
 // GetEstimationGuideInput is the input for the get_estimation_guide tool
@@ -54,12 +53,7 @@ type GetEstimationGuideOutput struct {
 	SuggestedQuestion string          `json:"suggested_question"`
 }
 
-// NewGetEstimationGuide creates a tool that provides estimation requirements for GCP services
-func NewGetEstimationGuide(g *genkit.Genkit, pricingClient *pricing.Client, freeTierService *freetier.Service) ai.Tool {
-	return genkit.DefineTool(
-		g,
-		"get_estimation_guide",
-		`Provides a dynamically generated guide for what information is needed to estimate costs for ANY Google Cloud service.
+const getEstimationGuideDescription = `Provides a dynamically generated guide for what information is needed to estimate costs for ANY Google Cloud service.
 This tool analyzes SKUs from the Cloud Billing Catalog API to generate accurate, up-to-date estimation requirements.
 
 IMPORTANT: Call this tool FIRST before attempting to estimate costs. This ensures you gather all necessary information from the user through conversation.
@@ -83,90 +77,101 @@ When the user provides an architecture diagram (image):
 - Dynamically analyzes SKUs to determine required parameters
 - Retrieves free tier information from GCP documentation
 - Works for ALL Google Cloud services (1800+ services)
-- Always returns up-to-date pricing factors based on actual SKU data`,
+- Always returns up-to-date pricing factors based on actual SKU data`
+
+// NewGetEstimationGuide creates a tool that provides estimation requirements for GCP services
+func NewGetEstimationGuide(g *genkit.Genkit, pricingClient PricingClient, freeTierService FreeTierProvider) ai.Tool {
+	return genkit.DefineTool(
+		g,
+		"get_estimation_guide",
+		getEstimationGuideDescription,
 		func(ctx *ai.ToolContext, input GetEstimationGuideInput) (*GetEstimationGuideOutput, error) {
-			log.Printf("Tool 'get_estimation_guide' called for service: %s", input.ServiceName)
-
-			if input.ServiceName == "" {
-				return nil, fmt.Errorf("service_name is required")
-			}
-
-			// Find the service ID
-			serviceID, displayName, err := findServiceByName(ctx.Context, pricingClient, input.ServiceName)
-			if err != nil {
-				log.Printf("Warning: Could not find service ID for %s: %v", input.ServiceName, err)
-				// Continue without service ID - we can still provide a generic guide
-			}
-
-			var guide EstimationGuide
-			guide.ServiceName = input.ServiceName
-			if displayName != "" {
-				guide.ServiceName = displayName
-			}
-			guide.ServiceID = serviceID
-
-			// If we found a service ID, analyze its SKUs
-			if serviceID != "" {
-				skuGuide, err := analyzeSkusToGenerateGuide(ctx.Context, pricingClient, serviceID, guide.ServiceName)
-				if err != nil {
-					log.Printf("Warning: Could not analyze SKUs for %s: %v", input.ServiceName, err)
-				} else {
-					guide = *skuGuide
-				}
-			}
-
-			// If we still don't have parameters, use generic template
-			if len(guide.Parameters) == 0 {
-				guide = buildGenericGuide(input.ServiceName)
-			}
-
-			// Fetch free tier information
-			if freeTierService != nil {
-				freeTierInfo, err := freeTierService.GetFreeTier(ctx.Context, input.ServiceName)
-				if err == nil && freeTierInfo != nil {
-					guide.FreeTier = &FreeTierSummary{
-						Available: true,
-						Items:     freeTierInfo.Items,
-						Scope:     freeTierInfo.Scope,
-						Period:    freeTierInfo.Period,
-						SourceURL: freeTierInfo.SourceURL,
-					}
-				} else {
-					guide.FreeTier = &FreeTierSummary{
-						Available: false,
-					}
-				}
-			}
-
-			// Build suggested question
-			suggestedQuestion := buildSuggestedQuestion(&guide)
-
-			return &GetEstimationGuideOutput{
-				Guide:             guide,
-				SuggestedQuestion: suggestedQuestion,
-			}, nil
+			return runGetEstimationGuide(ctx.Context, pricingClient, freeTierService, input)
 		})
 }
 
+func runGetEstimationGuide(ctx context.Context, pricingClient PricingClient, freeTierService FreeTierProvider, input GetEstimationGuideInput) (*GetEstimationGuideOutput, error) {
+	log.Printf("Tool 'get_estimation_guide' called for service: %s", input.ServiceName)
+
+	if input.ServiceName == "" {
+		return nil, fmt.Errorf("service_name is required")
+	}
+
+	// Find the service ID
+	serviceID, displayName, err := findServiceByName(ctx, pricingClient, input.ServiceName)
+	if err != nil {
+		log.Printf("Warning: Could not find service ID for %s: %v", input.ServiceName, err)
+		// Continue without service ID - we can still provide a generic guide
+	}
+
+	var guide EstimationGuide
+	guide.ServiceName = input.ServiceName
+	if displayName != "" {
+		guide.ServiceName = displayName
+	}
+	guide.ServiceID = serviceID
+
+	// If we found a service ID, analyze its SKUs
+	if serviceID != "" {
+		skuGuide, err := analyzeSkusToGenerateGuide(ctx, pricingClient, serviceID, guide.ServiceName)
+		if err != nil {
+			log.Printf("Warning: Could not analyze SKUs for %s: %v", input.ServiceName, err)
+		} else {
+			guide = *skuGuide
+		}
+	}
+
+	// If we still don't have parameters, use generic template
+	if len(guide.Parameters) == 0 {
+		guide = buildGenericGuide(input.ServiceName)
+	}
+
+	// Fetch free tier information
+	if freeTierService != nil {
+		freeTierInfo, err := freeTierService.GetFreeTier(ctx, input.ServiceName)
+		if err == nil && freeTierInfo != nil {
+			guide.FreeTier = &FreeTierSummary{
+				Available: true,
+				Items:     freeTierInfo.Items,
+				Scope:     freeTierInfo.Scope,
+				Period:    freeTierInfo.Period,
+				SourceURL: freeTierInfo.SourceURL,
+			}
+		} else {
+			guide.FreeTier = &FreeTierSummary{
+				Available: false,
+			}
+		}
+	}
+
+	// Build suggested question
+	suggestedQuestion := buildSuggestedQuestion(&guide)
+
+	return &GetEstimationGuideOutput{
+		Guide:             guide,
+		SuggestedQuestion: suggestedQuestion,
+	}, nil
+}
+
 // findServiceByName searches for a GCP service by name and returns its ID
-func findServiceByName(ctx context.Context, client *pricing.Client, serviceName string) (string, string, error) {
+func findServiceByName(ctx context.Context, client PricingClient, serviceName string) (string, string, error) {
 	normalizedName := strings.ToLower(strings.TrimSpace(serviceName))
 
-	// Fetch services from the API
-	resp, err := client.ListServices(ctx, 5000, "")
+	// Fetch all services from the API (follows pagination)
+	services, err := client.ListAllServices(ctx)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to list services: %w", err)
 	}
 
 	// Try exact match first
-	for _, svc := range resp.Services {
+	for _, svc := range services {
 		if strings.ToLower(svc.DisplayName) == normalizedName {
 			return svc.ServiceID, svc.DisplayName, nil
 		}
 	}
 
 	// Try partial match
-	for _, svc := range resp.Services {
+	for _, svc := range services {
 		svcNameLower := strings.ToLower(svc.DisplayName)
 		if strings.Contains(svcNameLower, normalizedName) || strings.Contains(normalizedName, svcNameLower) {
 			return svc.ServiceID, svc.DisplayName, nil
@@ -176,7 +181,7 @@ func findServiceByName(ctx context.Context, client *pricing.Client, serviceName 
 	// Try matching common aliases
 	aliases := getServiceAliases()
 	if canonical, ok := aliases[normalizedName]; ok {
-		for _, svc := range resp.Services {
+		for _, svc := range services {
 			if strings.ToLower(svc.DisplayName) == canonical {
 				return svc.ServiceID, svc.DisplayName, nil
 			}
@@ -204,7 +209,7 @@ func getServiceAliases() map[string]string {
 }
 
 // analyzeSkusToGenerateGuide analyzes SKUs for a service and generates an estimation guide
-func analyzeSkusToGenerateGuide(ctx context.Context, client *pricing.Client, serviceID, serviceName string) (*EstimationGuide, error) {
+func analyzeSkusToGenerateGuide(ctx context.Context, client PricingClient, serviceID, serviceName string) (*EstimationGuide, error) {
 	// Fetch SKUs for the service
 	resp, err := client.ListSKUs(ctx, serviceID, 500, "")
 	if err != nil {
