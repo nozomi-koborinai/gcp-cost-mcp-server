@@ -362,14 +362,15 @@ gcp-cost-mcp-server/
 │   │   └── patterns.go          # Regex patterns for extraction
 │   ├── pricing/
 │   │   └── client.go            # Cloud Billing Catalog API client
-│   ├── tools/
-│   │   ├── get_estimation_guide.go  # Dynamic guide generator
-│   │   ├── estimate_cost.go         # Cost calc + free tier
-│   │   ├── list_services.go
-│   │   ├── list_skus.go
-│   │   └── get_sku_price.go
-│   └── mcp/
-│       └── server.go            # MCP server wrapper
+│   └── tools/
+│       ├── deps.go                  # Consumer-side interfaces (PricingClient, FreeTierProvider)
+│       ├── get_estimation_guide.go  # Dynamic guide generator
+│       ├── guide_builder.go         # SKU analysis for guide generation
+│       ├── service_lookup.go        # Service name → service ID resolution
+│       ├── estimate_cost.go         # Cost calc + free tier
+│       ├── list_services.go
+│       ├── list_skus.go
+│       └── get_sku_price.go
 ```
 
 ### Tool Design
