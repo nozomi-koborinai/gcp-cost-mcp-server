@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -36,66 +37,59 @@ type ListSKUsOutput struct {
 	ServiceID     string    `json:"service_id"`
 }
 
+const listSKUsDescription = "Lists SKUs (Stock Keeping Units) for a specific Google Cloud service. Each SKU represents a billable item with its own pricing. Use the sku_id to get detailed pricing information. Supports optional filtering by region, keyword (display name), and category to quickly find specific SKUs without manual pagination."
+
 // NewListSKUs creates a tool that lists SKUs for a specific Google Cloud service
-func NewListSKUs(g *genkit.Genkit, client *pricing.Client) ai.Tool {
+func NewListSKUs(g *genkit.Genkit, client PricingClient) ai.Tool {
 	return genkit.DefineTool(
 		g,
 		"list_skus",
-		"Lists SKUs (Stock Keeping Units) for a specific Google Cloud service. Each SKU represents a billable item with its own pricing. Use the sku_id to get detailed pricing information. Supports optional filtering by region, keyword (display name), and category to quickly find specific SKUs without manual pagination.",
+		listSKUsDescription,
 		func(ctx *ai.ToolContext, input ListSKUsInput) (*ListSKUsOutput, error) {
-			log.Printf("Tool 'list_skus' called for service_id: %s (region=%q, keyword=%q, category=%q)",
-				input.ServiceID, input.Region, input.Keyword, input.Category)
-
-			if input.ServiceID == "" {
-				return nil, fmt.Errorf("service_id is required")
-			}
-
-			hasFilters := input.Region != "" || input.Keyword != "" || input.Category != ""
-
-			var allSKUs []pricing.SKU
-
-			if hasFilters {
-				// When filters are applied, fetch all SKUs to ensure complete results
-				pageToken := ""
-				for {
-					resp, err := client.ListSKUs(ctx.Context, input.ServiceID, 5000, pageToken)
-					if err != nil {
-						log.Printf("Error listing SKUs: %v", err)
-						return nil, fmt.Errorf("failed to list SKUs: %w", err)
-					}
-					allSKUs = append(allSKUs, resp.SKUs...)
-					if resp.NextPageToken == "" {
-						break
-					}
-					pageToken = resp.NextPageToken
-				}
-			} else {
-				resp, err := client.ListSKUs(ctx.Context, input.ServiceID, input.PageSize, input.PageToken)
-				if err != nil {
-					log.Printf("Error listing SKUs: %v", err)
-					return nil, fmt.Errorf("failed to list SKUs: %w", err)
-				}
-				allSKUs = resp.SKUs
-
-				// When no filters, preserve API pagination
-				skus := convertSKUs(allSKUs)
-				return &ListSKUsOutput{
-					SKUs:          skus,
-					NextPageToken: resp.NextPageToken,
-					TotalReturned: len(skus),
-					ServiceID:     input.ServiceID,
-				}, nil
-			}
-
-			skus := convertSKUs(allSKUs)
-			skus = filterSKUs(skus, input.Region, input.Keyword, input.Category)
-
-			return &ListSKUsOutput{
-				SKUs:          skus,
-				TotalReturned: len(skus),
-				ServiceID:     input.ServiceID,
-			}, nil
+			return runListSKUs(ctx.Context, client, input)
 		})
+}
+
+func runListSKUs(ctx context.Context, client PricingClient, input ListSKUsInput) (*ListSKUsOutput, error) {
+	log.Printf("Tool 'list_skus' called for service_id: %s (region=%q, keyword=%q, category=%q)",
+		input.ServiceID, input.Region, input.Keyword, input.Category)
+
+	if input.ServiceID == "" {
+		return nil, fmt.Errorf("service_id is required")
+	}
+
+	hasFilters := input.Region != "" || input.Keyword != "" || input.Category != ""
+
+	if !hasFilters {
+		resp, err := client.ListSKUs(ctx, input.ServiceID, input.PageSize, input.PageToken)
+		if err != nil {
+			log.Printf("Error listing SKUs: %v", err)
+			return nil, fmt.Errorf("failed to list SKUs: %w", err)
+		}
+
+		skus := convertSKUs(resp.SKUs)
+		return &ListSKUsOutput{
+			SKUs:          skus,
+			NextPageToken: resp.NextPageToken,
+			TotalReturned: len(skus),
+			ServiceID:     input.ServiceID,
+		}, nil
+	}
+
+	// When filters are applied, fetch all SKUs to ensure complete results
+	allSKUs, err := client.ListAllSKUs(ctx, input.ServiceID)
+	if err != nil {
+		log.Printf("Error listing SKUs: %v", err)
+		return nil, fmt.Errorf("failed to list SKUs: %w", err)
+	}
+
+	skus := filterSKUs(convertSKUs(allSKUs), input.Region, input.Keyword, input.Category)
+
+	return &ListSKUsOutput{
+		SKUs:          skus,
+		TotalReturned: len(skus),
+		ServiceID:     input.ServiceID,
+	}, nil
 }
 
 func convertSKUs(raw []pricing.SKU) []SKUInfo {
