@@ -154,7 +154,7 @@ When estimating costs for multiple services (e.g., from an architecture diagram)
 			}
 
 			// Calculate the cost based on billable usage (after free tier deduction)
-			estimatedCost, err := client.CalculateCost(rate, billableUsage)
+			estimatedCost, err := pricing.CalculateCost(rate, billableUsage)
 			if err != nil {
 				log.Printf("Error calculating cost: %v", err)
 				return nil, fmt.Errorf("failed to calculate cost: %w", err)

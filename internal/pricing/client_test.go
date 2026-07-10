@@ -5,8 +5,6 @@ import (
 )
 
 func TestClient_CalculateCost(t *testing.T) {
-	client := &Client{}
-
 	tests := []struct {
 		name        string
 		rate        *Rate
@@ -126,7 +124,7 @@ func TestClient_CalculateCost(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotCost, err := client.CalculateCost(tt.rate, tt.usageAmount)
+			gotCost, err := CalculateCost(tt.rate, tt.usageAmount)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CalculateCost() error = %v, wantErr %v", err, tt.wantErr)
@@ -144,6 +142,78 @@ func TestClient_CalculateCost(t *testing.T) {
 	}
 }
 
+func TestAmount_Float64(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		want    float64
+		wantErr bool
+	}{
+		{name: "empty string is zero", value: "", want: 0},
+		{name: "integer", value: "100", want: 100},
+		{name: "decimal", value: "0.5", want: 0.5},
+		{name: "invalid", value: "abc", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Amount{Value: tt.value}.Float64()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Float64() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && got != tt.want {
+				t.Errorf("Float64() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMoney_UnitPrice(t *testing.T) {
+	tests := []struct {
+		name    string
+		money   Money
+		want    float64
+		wantErr bool
+	}{
+		{name: "units and nanos", money: Money{Units: "1", Nanos: 500000000}, want: 1.5},
+		{name: "nanos only with empty units", money: Money{Nanos: 100000000}, want: 0.1},
+		{name: "zero", money: Money{}, want: 0},
+		{name: "invalid units", money: Money{Units: "x"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.money.UnitPrice()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("UnitPrice() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && got != tt.want {
+				t.Errorf("UnitPrice() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCalculateCost_InvalidTierData(t *testing.T) {
+	rate := &Rate{
+		Tiers: []Tier{{
+			StartAmount: Amount{Value: "not-a-number"},
+			ListPrice:   Money{Units: "1"},
+		}},
+	}
+	if _, err := CalculateCost(rate, 100); err == nil {
+		t.Fatal("CalculateCost should return error for invalid tier start amount")
+	}
+
+	rate = &Rate{
+		Tiers: []Tier{{
+			StartAmount: Amount{Value: "0"},
+			ListPrice:   Money{Units: "not-a-number"},
+		}},
+	}
+	if _, err := CalculateCost(rate, 100); err == nil {
+		t.Fatal("CalculateCost should return error for invalid list price units")
+	}
+}
+
 func TestDefaultPageSize(t *testing.T) {
 	if DefaultPageSize != 5000 {
 		t.Errorf("DefaultPageSize = %d, want 5000", DefaultPageSize)
@@ -155,9 +225,4 @@ func TestBaseURL(t *testing.T) {
 	if BaseURL != expected {
 		t.Errorf("BaseURL = %s, want %s", BaseURL, expected)
 	}
-}
-
-// TestPricingClientInterface verifies that Client implements PricingClient
-func TestPricingClientInterface(t *testing.T) {
-	var _ PricingClient = (*Client)(nil)
 }
