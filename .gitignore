@@ -4,6 +4,9 @@
 # Reference files
 .reference
 
+# AI working documents (specs, plans)
+docs/superpowers/
+
 # Built binary
 gcp-cost-mcp-server
 gcp-cost-mcp-server.exe
@@ -20,3 +23,5 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+# SDD scratch
+.superpowers/
