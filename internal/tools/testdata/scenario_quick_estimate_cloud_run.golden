@@ -1,0 +1,30 @@
+{
+  "prompt": "Estimate monthly cost for Cloud Run in asia-northeast1: 1 vCPU, 2GB, 730 hours/month",
+  "steps": [
+    "get_estimation_guide",
+    "estimate_cost"
+  ],
+  "estimates": [
+    {
+      "estimate": {
+        "sku_id": "RUN-CPU-001",
+        "usage_amount": 2628000,
+        "unit": "s",
+        "estimated_cost": 244800,
+        "currency_code": "USD",
+        "price_per_unit": 0.1,
+        "tiered_pricing": false,
+        "number_of_tiers": 1,
+        "cost_breakdown": "Total usage: 2628000.00 s. Free tier deducted: 180000.00 s. Billable usage: 2448000.00 s. Flat rate: 0.100000 USD per unit = 244800.000000 USD",
+        "service_name": "Cloud Run",
+        "region": "asia-northeast1",
+        "description": "1 vCPU Cloud Run, 730 hours/month",
+        "total_usage": 2628000,
+        "free_tier_applied": 180000,
+        "billable_usage": 2448000,
+        "free_tier_note": "Free tier applied: 180000 vCPU-seconds (account, month)",
+        "free_tier_source_url": "https://cloud.google.com/run/pricing"
+      }
+    }
+  ]
+}
