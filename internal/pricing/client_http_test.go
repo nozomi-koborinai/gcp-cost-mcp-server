@@ -30,7 +30,7 @@ func TestClient_ListServices(t *testing.T) {
 			t.Errorf("pageToken = %q, want tok1", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"services":[{"name":"services/0000-AAAA","serviceId":"0000-AAAA","displayName":"Cloud Run"}],"nextPageToken":"tok2"}`))
+		_, _ = w.Write([]byte(`{"services":[{"name":"services/0000-AAAA","serviceId":"0000-AAAA","displayName":"Cloud Run"}],"nextPageToken":"tok2"}`))
 	}))
 
 	resp, err := client.ListServices(context.Background(), 100, "tok1")
@@ -53,7 +53,7 @@ func TestClient_ListServices_DefaultPageSize(t *testing.T) {
 		if got := r.URL.Query().Get("pageSize"); got != "5000" {
 			t.Errorf("pageSize = %q, want 5000 (DefaultPageSize)", got)
 		}
-		w.Write([]byte(`{"services":[]}`))
+		_, _ = w.Write([]byte(`{"services":[]}`))
 	}))
 
 	if _, err := client.ListServices(context.Background(), 0, ""); err != nil {
@@ -73,7 +73,7 @@ func TestClient_ListServices_HTTPError(t *testing.T) {
 
 func TestClient_ListServices_InvalidJSON(t *testing.T) {
 	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{not json`))
+		_, _ = w.Write([]byte(`{not json`))
 	}))
 
 	if _, err := client.ListServices(context.Background(), 0, ""); err == nil {
@@ -89,7 +89,7 @@ func TestClient_ListSKUs(t *testing.T) {
 		if got, want := r.URL.Query().Get("filter"), `service="services/6F81-5844-456A"`; got != want {
 			t.Errorf("filter = %q, want %q", got, want)
 		}
-		w.Write([]byte(`{"skus":[{"skuId":"0008-F633-76AA","displayName":"N1 Predefined Instance Core"}]}`))
+		_, _ = w.Write([]byte(`{"skus":[{"skuId":"0008-F633-76AA","displayName":"N1 Predefined Instance Core"}]}`))
 	}))
 
 	resp, err := client.ListSKUs(context.Background(), "6F81-5844-456A", 0, "")
@@ -119,7 +119,7 @@ func TestClient_GetSKUPrice(t *testing.T) {
 		if got := r.URL.Query().Get("currencyCode"); got != "JPY" {
 			t.Errorf("currencyCode = %q, want JPY", got)
 		}
-		w.Write([]byte(`{"name":"skus/0008-F633-76AA/price","currencyCode":"JPY","skuPrices":[{"valueType":"rate","rate":{"tiers":[{"startAmount":{"value":"0"},"listPrice":{"currencyCode":"JPY","units":"5","nanos":0}}],"unitInfo":{"unit":"h"}}}]}`))
+		_, _ = w.Write([]byte(`{"name":"skus/0008-F633-76AA/price","currencyCode":"JPY","skuPrices":[{"valueType":"rate","rate":{"tiers":[{"startAmount":{"value":"0"},"listPrice":{"currencyCode":"JPY","units":"5","nanos":0}}],"unitInfo":{"unit":"h"}}}]}`))
 	}))
 
 	resp, err := client.GetSKUPrice(context.Background(), "0008-F633-76AA", "JPY")
@@ -148,9 +148,9 @@ func TestClient_ListAllServices_Pagination(t *testing.T) {
 	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Query().Get("pageToken") {
 		case "":
-			w.Write([]byte(`{"services":[{"serviceId":"S1","displayName":"Service One"}],"nextPageToken":"page2"}`))
+			_, _ = w.Write([]byte(`{"services":[{"serviceId":"S1","displayName":"Service One"}],"nextPageToken":"page2"}`))
 		case "page2":
-			w.Write([]byte(`{"services":[{"serviceId":"S2","displayName":"Service Two"}]}`))
+			_, _ = w.Write([]byte(`{"services":[{"serviceId":"S2","displayName":"Service Two"}]}`))
 		default:
 			t.Errorf("unexpected pageToken %q", r.URL.Query().Get("pageToken"))
 		}
@@ -172,9 +172,9 @@ func TestClient_ListAllSKUs_Pagination(t *testing.T) {
 	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Query().Get("pageToken") {
 		case "":
-			w.Write([]byte(`{"skus":[{"skuId":"K1","displayName":"SKU One"}],"nextPageToken":"page2"}`))
+			_, _ = w.Write([]byte(`{"skus":[{"skuId":"K1","displayName":"SKU One"}],"nextPageToken":"page2"}`))
 		case "page2":
-			w.Write([]byte(`{"skus":[{"skuId":"K2","displayName":"SKU Two"}]}`))
+			_, _ = w.Write([]byte(`{"skus":[{"skuId":"K2","displayName":"SKU Two"}]}`))
 		default:
 			t.Errorf("unexpected pageToken %q", r.URL.Query().Get("pageToken"))
 		}

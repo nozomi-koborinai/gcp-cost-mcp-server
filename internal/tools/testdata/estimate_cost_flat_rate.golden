@@ -1,0 +1,16 @@
+{
+  "estimate": {
+    "sku_id": "TEST-FLAT",
+    "usage_amount": 100,
+    "unit": "h",
+    "estimated_cost": 10,
+    "currency_code": "USD",
+    "price_per_unit": 0.1,
+    "tiered_pricing": false,
+    "number_of_tiers": 1,
+    "cost_breakdown": "Flat rate: 0.100000 USD per unit = 10.000000 USD",
+    "total_usage": 100,
+    "free_tier_applied": 0,
+    "billable_usage": 100
+  }
+}
