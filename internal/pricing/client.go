@@ -20,18 +20,6 @@ const (
 	DefaultPageSize = 5000
 )
 
-// PricingClient defines the interface for pricing operations.
-// This interface allows for mocking in tests.
-type PricingClient interface {
-	ListServices(ctx context.Context, pageSize int, pageToken string) (*ListServicesResponse, error)
-	ListSKUs(ctx context.Context, serviceID string, pageSize int, pageToken string) (*ListSKUsResponse, error)
-	GetSKUPrice(ctx context.Context, skuID string, currencyCode string) (*GetPriceResponse, error)
-	CalculateCost(rate *Rate, usageAmount float64) (float64, error)
-}
-
-// Ensure Client implements PricingClient interface
-var _ PricingClient = (*Client)(nil)
-
 // Client is a client for the Google Cloud Billing Pricing API
 type Client struct {
 	httpClient *http.Client
@@ -50,6 +38,33 @@ func NewClient(ctx context.Context) (*Client, error) {
 		httpClient: client,
 		baseURL:    BaseURL,
 	}, nil
+}
+
+// getJSON performs an authenticated GET request and decodes the JSON
+// response into out. Non-200 responses are returned as errors including
+// the response body.
+func (c *Client) getJSON(ctx context.Context, reqURL string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return nil
 }
 
 // Service represents a Google Cloud service
@@ -137,11 +152,38 @@ type Amount struct {
 	Value string `json:"value,omitempty"`
 }
 
+// Float64 returns the amount as a float64. An empty value is treated as
+// zero because the API omits zero-valued startAmount fields.
+func (a Amount) Float64() (float64, error) {
+	if a.Value == "" {
+		return 0, nil
+	}
+	v, err := strconv.ParseFloat(a.Value, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid amount %q: %w", a.Value, err)
+	}
+	return v, nil
+}
+
 // Money represents a monetary value
 type Money struct {
 	CurrencyCode string `json:"currencyCode,omitempty"`
 	Units        string `json:"units,omitempty"`
 	Nanos        int64  `json:"nanos,omitempty"`
+}
+
+// UnitPrice returns the price as a float64, combining whole units and
+// nanos. Empty units are treated as zero.
+func (m Money) UnitPrice() (float64, error) {
+	var units float64
+	if m.Units != "" {
+		u, err := strconv.ParseFloat(m.Units, 64)
+		if err != nil {
+			return 0, fmt.Errorf("invalid price units %q: %w", m.Units, err)
+		}
+		units = u
+	}
+	return units + float64(m.Nanos)/1e9, nil
 }
 
 // UnitInfo contains unit information
@@ -192,27 +234,10 @@ func (c *Client) ListServices(ctx context.Context, pageSize int, pageToken strin
 
 	reqURL := fmt.Sprintf("%s/v2beta/services?%s", c.baseURL, params.Encode())
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
 	var result ListServicesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	if err := c.getJSON(ctx, reqURL, &result); err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
@@ -235,27 +260,10 @@ func (c *Client) ListSKUs(ctx context.Context, serviceID string, pageSize int, p
 
 	reqURL := fmt.Sprintf("%s/v2beta/skus?%s", c.baseURL, params.Encode())
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
 	var result ListSKUsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	if err := c.getJSON(ctx, reqURL, &result); err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
@@ -275,32 +283,52 @@ func (c *Client) GetSKUPrice(ctx context.Context, skuID string, currencyCode str
 		reqURL = fmt.Sprintf("%s?%s", reqURL, params.Encode())
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
 	var result GetPriceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	if err := c.getJSON(ctx, reqURL, &result); err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
-// CalculateCost calculates the estimated cost based on usage amount and pricing tiers
-func (c *Client) CalculateCost(rate *Rate, usageAmount float64) (float64, error) {
+// ListAllServices lists all publicly available Google Cloud services,
+// following pagination until every page has been fetched.
+func (c *Client) ListAllServices(ctx context.Context) ([]Service, error) {
+	var all []Service
+	pageToken := ""
+	for {
+		resp, err := c.ListServices(ctx, DefaultPageSize, pageToken)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, resp.Services...)
+		if resp.NextPageToken == "" {
+			return all, nil
+		}
+		pageToken = resp.NextPageToken
+	}
+}
+
+// ListAllSKUs lists all SKUs for a specific service, following pagination
+// until every page has been fetched.
+func (c *Client) ListAllSKUs(ctx context.Context, serviceID string) ([]SKU, error) {
+	var all []SKU
+	pageToken := ""
+	for {
+		resp, err := c.ListSKUs(ctx, serviceID, DefaultPageSize, pageToken)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, resp.SKUs...)
+		if resp.NextPageToken == "" {
+			return all, nil
+		}
+		pageToken = resp.NextPageToken
+	}
+}
+
+// CalculateCost calculates the estimated cost based on usage amount and
+// pricing tiers. It is a pure computation and does not call the API.
+func CalculateCost(rate *Rate, usageAmount float64) (float64, error) {
 	if rate == nil {
 		return 0, fmt.Errorf("invalid price data: rate is nil")
 	}
@@ -313,11 +341,17 @@ func (c *Client) CalculateCost(rate *Rate, usageAmount float64) (float64, error)
 	remainingUsage := usageAmount
 
 	for i, tier := range rate.Tiers {
-		startAmount, _ := strconv.ParseFloat(tier.StartAmount.Value, 64)
+		startAmount, err := tier.StartAmount.Float64()
+		if err != nil {
+			return 0, fmt.Errorf("invalid tier start amount: %w", err)
+		}
 
 		var endAmount float64
 		if i+1 < len(rate.Tiers) {
-			endAmount, _ = strconv.ParseFloat(rate.Tiers[i+1].StartAmount.Value, 64)
+			endAmount, err = rate.Tiers[i+1].StartAmount.Float64()
+			if err != nil {
+				return 0, fmt.Errorf("invalid tier start amount: %w", err)
+			}
 		} else {
 			endAmount = remainingUsage + startAmount + 1 // Use all remaining usage
 		}
@@ -332,10 +366,10 @@ func (c *Client) CalculateCost(rate *Rate, usageAmount float64) (float64, error)
 			usageInTier = tierRange
 		}
 
-		// Calculate price per unit (units + nanos)
-		units, _ := strconv.ParseFloat(tier.ListPrice.Units, 64)
-		nanos := float64(tier.ListPrice.Nanos) / 1e9
-		pricePerUnit := units + nanos
+		pricePerUnit, err := tier.ListPrice.UnitPrice()
+		if err != nil {
+			return 0, fmt.Errorf("invalid tier price: %w", err)
+		}
 
 		totalCost += usageInTier * pricePerUnit
 		remainingUsage -= usageInTier

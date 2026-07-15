@@ -1,0 +1,53 @@
+{
+  "prompt": "Estimate monthly total for Cloud Run plus Cloud Storage 100GB",
+  "steps": [
+    "get_estimation_guide:Cloud Run",
+    "get_estimation_guide:Cloud Storage",
+    "estimate_cost:Cloud Run",
+    "estimate_cost:Cloud Storage"
+  ],
+  "estimates": [
+    {
+      "estimate": {
+        "sku_id": "RUN-CPU-001",
+        "usage_amount": 200000,
+        "unit": "s",
+        "estimated_cost": 2000,
+        "currency_code": "USD",
+        "price_per_unit": 0.1,
+        "tiered_pricing": false,
+        "number_of_tiers": 1,
+        "cost_breakdown": "Total usage: 200000.00 s. Free tier deducted: 180000.00 s. Billable usage: 20000.00 s. Flat rate: 0.100000 USD per unit = 2000.000000 USD",
+        "service_name": "Cloud Run",
+        "region": "asia-northeast1",
+        "description": "Cloud Run CPU seconds",
+        "total_usage": 200000,
+        "free_tier_applied": 180000,
+        "billable_usage": 20000,
+        "free_tier_note": "Free tier applied: 180000 vCPU-seconds (account, month)",
+        "free_tier_source_url": "https://cloud.google.com/run/pricing"
+      }
+    },
+    {
+      "estimate": {
+        "sku_id": "GCS-STD-001",
+        "usage_amount": 100,
+        "unit": "GiBy",
+        "estimated_cost": 1.9000000000000001,
+        "currency_code": "USD",
+        "price_per_unit": 0.02,
+        "tiered_pricing": false,
+        "number_of_tiers": 1,
+        "cost_breakdown": "Total usage: 100.00 GiBy. Free tier deducted: 5.00 GiBy. Billable usage: 95.00 GiBy. Flat rate: 0.020000 USD per unit = 1.900000 USD",
+        "service_name": "Cloud Storage",
+        "description": "100GB Standard Storage",
+        "total_usage": 100,
+        "free_tier_applied": 5,
+        "billable_usage": 95,
+        "free_tier_note": "Free tier applied: 5 Standard Storage (account, month)",
+        "free_tier_source_url": "https://cloud.google.com/storage/pricing"
+      }
+    }
+  ],
+  "total_estimated_cost": 2001.9
+}

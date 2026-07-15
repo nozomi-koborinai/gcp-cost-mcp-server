@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -32,61 +33,58 @@ type ListServicesOutput struct {
 	TotalReturned int           `json:"total_returned"`
 }
 
+const listServicesDescription = "Lists publicly available Google Cloud services with their IDs and display names. Supports filtering by name and excluding third-party marketplace products. Use the service_id to query SKUs for a specific service."
+
 // NewListServices creates a tool that lists all Google Cloud services
-func NewListServices(g *genkit.Genkit, client *pricing.Client) ai.Tool {
+func NewListServices(g *genkit.Genkit, client PricingClient) ai.Tool {
 	return genkit.DefineTool(
 		g,
 		"list_services",
-		"Lists publicly available Google Cloud services with their IDs and display names. Supports filtering by name and excluding third-party marketplace products. Use the service_id to query SKUs for a specific service.",
+		listServicesDescription,
 		func(ctx *ai.ToolContext, input ListServicesInput) (*ListServicesOutput, error) {
-			log.Printf("Tool 'list_services' called with page_size: %d, name=%q, core_only=%v",
-				input.PageSize, input.Name, input.CoreOnly)
-
-			hasFilters := input.Name != "" || input.CoreOnly
-
-			if hasFilters {
-				var allServices []pricing.Service
-				pageToken := ""
-				for {
-					resp, err := client.ListServices(ctx.Context, 5000, pageToken)
-					if err != nil {
-						log.Printf("Error listing services: %v", err)
-						return nil, fmt.Errorf("failed to list services: %w", err)
-					}
-					allServices = append(allServices, resp.Services...)
-					if resp.NextPageToken == "" {
-						break
-					}
-					pageToken = resp.NextPageToken
-				}
-
-				services := filterServices(allServices, input.Name, input.CoreOnly)
-				return &ListServicesOutput{
-					Services:      services,
-					TotalReturned: len(services),
-				}, nil
-			}
-
-			resp, err := client.ListServices(ctx.Context, input.PageSize, input.PageToken)
-			if err != nil {
-				log.Printf("Error listing services: %v", err)
-				return nil, fmt.Errorf("failed to list services: %w", err)
-			}
-
-			services := make([]ServiceInfo, len(resp.Services))
-			for i, svc := range resp.Services {
-				services[i] = ServiceInfo{
-					ServiceID:   svc.ServiceID,
-					DisplayName: svc.DisplayName,
-				}
-			}
-
-			return &ListServicesOutput{
-				Services:      services,
-				NextPageToken: resp.NextPageToken,
-				TotalReturned: len(services),
-			}, nil
+			return runListServices(ctx.Context, client, input)
 		})
+}
+
+func runListServices(ctx context.Context, client PricingClient, input ListServicesInput) (*ListServicesOutput, error) {
+	log.Printf("Tool 'list_services' called with page_size: %d, name=%q, core_only=%v",
+		input.PageSize, input.Name, input.CoreOnly)
+
+	hasFilters := input.Name != "" || input.CoreOnly
+
+	if hasFilters {
+		allServices, err := client.ListAllServices(ctx)
+		if err != nil {
+			log.Printf("Error listing services: %v", err)
+			return nil, fmt.Errorf("failed to list services: %w", err)
+		}
+
+		services := filterServices(allServices, input.Name, input.CoreOnly)
+		return &ListServicesOutput{
+			Services:      services,
+			TotalReturned: len(services),
+		}, nil
+	}
+
+	resp, err := client.ListServices(ctx, input.PageSize, input.PageToken)
+	if err != nil {
+		log.Printf("Error listing services: %v", err)
+		return nil, fmt.Errorf("failed to list services: %w", err)
+	}
+
+	services := make([]ServiceInfo, len(resp.Services))
+	for i, svc := range resp.Services {
+		services[i] = ServiceInfo{
+			ServiceID:   svc.ServiceID,
+			DisplayName: svc.DisplayName,
+		}
+	}
+
+	return &ListServicesOutput{
+		Services:      services,
+		NextPageToken: resp.NextPageToken,
+		TotalReturned: len(services),
+	}, nil
 }
 
 var gcpCoreServicePrefixes = []string{

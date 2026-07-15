@@ -1,0 +1,37 @@
+{
+  "prompt": "Find Compute Engine N1 SKUs in Tokyo and show unit price only",
+  "steps": [
+    "list_services",
+    "list_skus",
+    "get_sku_price"
+  ],
+  "price": {
+    "price": {
+      "sku_id": "GCE-N1-001",
+      "currency_code": "USD",
+      "unit": "h",
+      "unit_description": "hour",
+      "tiers": [
+        {
+          "start_amount": 0,
+          "price_per_unit": 0.0316,
+          "currency": "USD"
+        }
+      ],
+      "all_pricing_models": [
+        {
+          "consumption_model": "CONSUMPTION_MODEL_ON_DEMAND",
+          "unit": "h",
+          "unit_description": "hour",
+          "tiers": [
+            {
+              "start_amount": 0,
+              "price_per_unit": 0.0316,
+              "currency": "USD"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

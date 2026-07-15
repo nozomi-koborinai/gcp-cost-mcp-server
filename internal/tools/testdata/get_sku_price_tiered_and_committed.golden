@@ -1,0 +1,43 @@
+{
+  "price": {
+    "sku_id": "490F-75A9-E3F1",
+    "currency_code": "USD",
+    "unit": "s",
+    "unit_description": "second",
+    "tiers": [
+      {
+        "start_amount": 0,
+        "price_per_unit": 0.000024,
+        "currency": "USD"
+      }
+    ],
+    "all_pricing_models": [
+      {
+        "consumption_model": "DEFAULT",
+        "description": "On-demand pricing",
+        "unit": "s",
+        "unit_description": "second",
+        "tiers": [
+          {
+            "start_amount": 0,
+            "price_per_unit": 0.000024,
+            "currency": "USD"
+          }
+        ]
+      },
+      {
+        "consumption_model": "COMMITTED",
+        "description": "1 year commitment",
+        "unit": "s",
+        "unit_description": "second",
+        "tiers": [
+          {
+            "start_amount": 0,
+            "price_per_unit": 0.000017,
+            "currency": "USD"
+          }
+        ]
+      }
+    ]
+  }
+}
