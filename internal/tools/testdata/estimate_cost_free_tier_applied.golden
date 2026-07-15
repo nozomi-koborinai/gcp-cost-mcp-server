@@ -1,0 +1,21 @@
+{
+  "estimate": {
+    "sku_id": "TEST-FREE",
+    "usage_amount": 200000,
+    "unit": "s",
+    "estimated_cost": 2000,
+    "currency_code": "USD",
+    "price_per_unit": 0.1,
+    "tiered_pricing": false,
+    "number_of_tiers": 1,
+    "cost_breakdown": "Total usage: 200000.00 s. Free tier deducted: 180000.00 s. Billable usage: 20000.00 s. Flat rate: 0.100000 USD per unit = 2000.000000 USD",
+    "service_name": "Cloud Run",
+    "region": "asia-northeast1",
+    "description": "1 vCPU Cloud Run, monthly",
+    "total_usage": 200000,
+    "free_tier_applied": 180000,
+    "billable_usage": 20000,
+    "free_tier_note": "Free tier applied: 180000 vCPU-seconds (account, month)",
+    "free_tier_source_url": "https://cloud.google.com/run/pricing"
+  }
+}
