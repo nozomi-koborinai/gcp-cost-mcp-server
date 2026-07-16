@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"strings"
 
 	"github.com/firebase/genkit/go/ai"
@@ -17,11 +18,11 @@ const licenseManagerDocsURL = "https://cloud.google.com/compute/docs/instances/w
 // ClassifyResourceCostInput is a Terraform resource and the attributes needed
 // to classify its billing behavior and, when possible, estimate its cost.
 type ClassifyResourceCostInput struct {
-	ResourceType string `json:"resource_type" jsonschema_description:"Terraform resource type or address (for example, google_license_manager_configuration or google_license_manager_configuration.office). REQUIRED."`
-	Product      string `json:"product,omitempty" jsonschema_description:"License Manager product attribute. Currently priced: Office2021ProfessionalPlus."`
-	LicenseCount *int   `json:"license_count,omitempty" jsonschema_description:"License Manager license_count attribute (authorized users or packs). Required for a baseline estimate."`
-	Active       *bool  `json:"active,omitempty" jsonschema_description:"License Manager active attribute. Defaults to true in Terraform. A false value makes the current-month charge ambiguous because deactivation takes effect the following month."`
-	CurrencyCode string `json:"currency_code,omitempty" jsonschema_description:"ISO-4217 currency code. Defaults to USD. Supplemental prices may only be available in their documented currency."`
+	ResourceType string   `json:"resource_type" jsonschema_description:"Terraform resource type or address (for example, google_license_manager_configuration or google_license_manager_configuration.office). REQUIRED."`
+	Product      string   `json:"product,omitempty" jsonschema_description:"License Manager product attribute. Currently priced: Office2021ProfessionalPlus."`
+	LicenseCount *float64 `json:"license_count,omitempty" jsonschema_description:"License Manager license_count attribute (authorized users or packs). Must be a non-negative whole number. Required for a baseline estimate."`
+	Active       *bool    `json:"active,omitempty" jsonschema_description:"License Manager active attribute. Defaults to true in Terraform. A false value makes the current-month charge ambiguous because deactivation takes effect the following month."`
+	CurrencyCode string   `json:"currency_code,omitempty" jsonschema_description:"ISO-4217 currency code. Defaults to USD. Supplemental prices may only be available in their documented currency."`
 }
 
 // ResourceCostClassification describes how a Terraform resource incurs cost.
@@ -60,6 +61,13 @@ type ClassifyResourceCostOutput struct {
 const classifyResourceCostDescription = `Classifies the cost behavior of a Terraform resource and estimates an authorized-count monthly baseline when enough attributes are provided.
 
 The tool identifies whether billing is triggered by resource existence rather than runtime usage, returns the matching service/SKU and quantity attribute, and includes source-backed billing warnings.
+
+Inputs:
+- resource_type: REQUIRED Terraform resource type or full resource address
+- product: License Manager product ID
+- license_count: non-negative whole number of authorized users or packs
+- active: optional Terraform active value (defaults to true)
+- currency_code: optional ISO-4217 currency (defaults to USD)
 
 Currently supported:
 - google_license_manager_configuration with product=Office2021ProfessionalPlus
@@ -149,8 +157,11 @@ func runClassifyResourceCost(ctx context.Context, client PricingClient, input Cl
 	case *input.LicenseCount < 0:
 		classification.Warnings = append(classification.Warnings,
 			fmt.Sprintf("Attribute %q must be non-negative.", rule.QuantityAttribute))
+	case math.Trunc(*input.LicenseCount) != *input.LicenseCount:
+		classification.Warnings = append(classification.Warnings,
+			fmt.Sprintf("Attribute %q must be a whole number.", rule.QuantityAttribute))
 	default:
-		classification.Quantity = float64Pointer(float64(*input.LicenseCount))
+		classification.Quantity = float64Pointer(*input.LicenseCount)
 	}
 
 	inactive := input.Active != nil && !*input.Active

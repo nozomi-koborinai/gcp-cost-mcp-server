@@ -27,7 +27,7 @@ func TestNewClassifyResourceCost_DefinesToolSchema(t *testing.T) {
 	wantTypes := map[string]string{
 		"resource_type": "string",
 		"product":       "string",
-		"license_count": "integer",
+		"license_count": "number",
 		"active":        "boolean",
 		"currency_code": "string",
 	}
@@ -48,7 +48,7 @@ func TestRunClassifyResourceCost_LicenseManagerEstimate(t *testing.T) {
 	out, err := runClassifyResourceCost(context.Background(), client, ClassifyResourceCostInput{
 		ResourceType: "google_license_manager_configuration.office",
 		Product:      "Office2021ProfessionalPlus",
-		LicenseCount: intPointer(10),
+		LicenseCount: numberPointer(10),
 	})
 	if err != nil {
 		t.Fatalf("runClassifyResourceCost: %v", err)
@@ -96,7 +96,7 @@ func TestRunClassifyResourceCost_TerraformAddress(t *testing.T) {
 	out, err := runClassifyResourceCost(context.Background(), client, ClassifyResourceCostInput{
 		ResourceType: `module.desktop.google_license_manager_configuration.office["primary"]`,
 		Product:      "Office2021ProfessionalPlus",
-		LicenseCount: intPointer(2),
+		LicenseCount: numberPointer(2),
 	})
 	if err != nil {
 		t.Fatalf("runClassifyResourceCost: %v", err)
@@ -159,7 +159,7 @@ func TestRunClassifyResourceCost_UnsupportedProductDoesNotUseOfficePrice(t *test
 	out, err := runClassifyResourceCost(context.Background(), nil, ClassifyResourceCostInput{
 		ResourceType: "google_license_manager_configuration",
 		Product:      "MicrosoftSQLServer2022Enterprise",
-		LicenseCount: intPointer(2),
+		LicenseCount: numberPointer(2),
 	})
 	if err != nil {
 		t.Fatalf("runClassifyResourceCost: %v", err)
@@ -199,7 +199,7 @@ func TestRunClassifyResourceCost_InvalidQuantityAndInactiveSuppressEstimate(t *t
 	out, err := runClassifyResourceCost(context.Background(), client, ClassifyResourceCostInput{
 		ResourceType: "google_license_manager_configuration",
 		Product:      "Office2021ProfessionalPlus",
-		LicenseCount: intPointer(-1),
+		LicenseCount: numberPointer(-1),
 		Active:       boolPointer(false),
 	})
 	if err != nil {
@@ -219,12 +219,33 @@ func TestRunClassifyResourceCost_InvalidQuantityAndInactiveSuppressEstimate(t *t
 	}
 }
 
+func TestRunClassifyResourceCost_FractionalCountReturnsClassificationWarning(t *testing.T) {
+	client := WithSupplemental(&fakePricingClient{})
+	out, err := runClassifyResourceCost(context.Background(), client, ClassifyResourceCostInput{
+		ResourceType: "google_license_manager_configuration",
+		Product:      "Office2021ProfessionalPlus",
+		LicenseCount: numberPointer(1.5),
+	})
+	if err != nil {
+		t.Fatalf("runClassifyResourceCost: %v", err)
+	}
+	if !out.Classification.Matched || !out.Classification.PricingAvailable {
+		t.Fatalf("classification was lost: %+v", out.Classification)
+	}
+	if out.Classification.Quantity != nil || out.Classification.EstimatedBaseline != nil {
+		t.Fatalf("fractional count produced estimate: %+v", out.Classification)
+	}
+	if !warningsContain(out.Classification.Warnings, "whole number") {
+		t.Fatalf("Warnings = %v, want whole-number warning", out.Classification.Warnings)
+	}
+}
+
 func TestRunClassifyResourceCost_InactiveValidCountSuppressesAmbiguousBaseline(t *testing.T) {
 	client := WithSupplemental(&fakePricingClient{})
 	out, err := runClassifyResourceCost(context.Background(), client, ClassifyResourceCostInput{
 		ResourceType: "google_license_manager_configuration",
 		Product:      "Office2021ProfessionalPlus",
-		LicenseCount: intPointer(10),
+		LicenseCount: numberPointer(10),
 		Active:       boolPointer(false),
 	})
 	if err != nil {
@@ -246,7 +267,7 @@ func TestRunClassifyResourceCost_PricingFailurePreservesClassification(t *testin
 	out, err := runClassifyResourceCost(context.Background(), client, ClassifyResourceCostInput{
 		ResourceType: "google_license_manager_configuration",
 		Product:      "Office2021ProfessionalPlus",
-		LicenseCount: intPointer(10),
+		LicenseCount: numberPointer(10),
 		CurrencyCode: "JPY",
 	})
 	if err != nil {
@@ -289,7 +310,7 @@ func warningsContain(warnings []string, want string) bool {
 	return false
 }
 
-func intPointer(value int) *int {
+func numberPointer(value float64) *float64 {
 	return &value
 }
 
