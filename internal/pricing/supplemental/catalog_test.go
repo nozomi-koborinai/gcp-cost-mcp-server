@@ -57,6 +57,9 @@ func TestOfficeSKUPrice(t *testing.T) {
 	if sku.SourceURL == "" {
 		t.Fatal("SourceURL is empty")
 	}
+	if len(sku.ProductIDs) != 1 || sku.ProductIDs[0] != "Office2021ProfessionalPlus" {
+		t.Fatalf("ProductIDs = %v, want [Office2021ProfessionalPlus]", sku.ProductIDs)
+	}
 
 	resp, err := PriceResponse(SKUIDOfficeLTSC2021ProPlus, "USD")
 	if err != nil {
@@ -75,6 +78,35 @@ func TestOfficeSKUPrice(t *testing.T) {
 
 	if _, err := PriceResponse(SKUIDOfficeLTSC2021ProPlus, "JPY"); err == nil {
 		t.Fatal("expected error for non-USD currency")
+	}
+}
+
+func TestFindSKUByProductID(t *testing.T) {
+	tests := []string{
+		"Office2021ProfessionalPlus",
+		"office2021professionalplus",
+		"projects/example/locations/us-central1/products/Office2021ProfessionalPlus",
+	}
+	for _, productID := range tests {
+		sku := FindSKUByProductID(ServiceIDLicenseManager, productID)
+		if sku == nil {
+			t.Fatalf("FindSKUByProductID(%q) = nil", productID)
+		}
+		if sku.SKUID != SKUIDOfficeLTSC2021ProPlus {
+			t.Fatalf("FindSKUByProductID(%q).SKUID = %q, want %q",
+				productID, sku.SKUID, SKUIDOfficeLTSC2021ProPlus)
+		}
+	}
+
+	if sku := FindSKUByProductID(ServiceIDLicenseManager, "MicrosoftSQLServer2022Enterprise"); sku != nil {
+		t.Fatalf("unexpected supplemental SKU for unsupported product: %+v", sku)
+	}
+}
+
+func TestProductIDsForService(t *testing.T) {
+	got := ProductIDsForService(ServiceIDLicenseManager)
+	if len(got) != 1 || got[0] != "Office2021ProfessionalPlus" {
+		t.Fatalf("ProductIDsForService = %v, want [Office2021ProfessionalPlus]", got)
 	}
 }
 

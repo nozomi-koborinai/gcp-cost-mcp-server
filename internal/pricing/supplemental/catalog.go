@@ -33,6 +33,7 @@ type SKU struct {
 	SKUID           string
 	DisplayName     string
 	ServiceID       string
+	ProductIDs      []string
 	Region          string
 	Categories      []string
 	PricePerUnit    float64
@@ -86,6 +87,7 @@ var catalog = []Service{
 				SKUID:           SKUIDOfficeLTSC2021ProPlus,
 				DisplayName:     "Microsoft Office LTSC 2021 Professional Plus (per user / month)",
 				ServiceID:       ServiceIDLicenseManager,
+				ProductIDs:      []string{"Office2021ProfessionalPlus"},
 				Region:          "global",
 				Categories:      []string{"License", "Microsoft Office", "SPLA"},
 				PricePerUnit:    21.40,
@@ -212,6 +214,42 @@ func FindSKU(skuID string) *SKU {
 		}
 	}
 	return nil
+}
+
+// FindSKUByProductID returns the supplemental SKU for a product exposed by
+// the service API (for example, Office2021ProfessionalPlus).
+func FindSKUByProductID(serviceID, productID string) *SKU {
+	normalized := strings.TrimSpace(productID)
+	if slash := strings.LastIndex(normalized, "/"); slash >= 0 {
+		normalized = normalized[slash+1:]
+	}
+	for i := range catalog {
+		if catalog[i].ServiceID != serviceID {
+			continue
+		}
+		for j := range catalog[i].SKUs {
+			for _, candidate := range catalog[i].SKUs[j].ProductIDs {
+				if strings.EqualFold(candidate, normalized) {
+					sku := catalog[i].SKUs[j]
+					return &sku
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// ProductIDsForService returns product IDs with supplemental pricing.
+func ProductIDsForService(serviceID string) []string {
+	svc := FindService(serviceID)
+	if svc == nil {
+		return nil
+	}
+	var productIDs []string
+	for _, sku := range svc.SKUs {
+		productIDs = append(productIDs, sku.ProductIDs...)
+	}
+	return productIDs
 }
 
 // LookupSKUMeta returns supplemental SKU metadata when skuID is curated.
