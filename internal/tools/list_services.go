@@ -33,7 +33,7 @@ type ListServicesOutput struct {
 	TotalReturned int           `json:"total_returned"`
 }
 
-const listServicesDescription = "Lists publicly available Google Cloud services with their IDs and display names. Supports filtering by name and excluding third-party marketplace products. Use the service_id to query SKUs for a specific service."
+const listServicesDescription = "Lists publicly available Google Cloud services with their IDs and display names. Supports filtering by name and excluding third-party marketplace products. Use the service_id to query SKUs for a specific service. Also includes curated Catalog-absent services such as License Manager (Office SPLA)."
 
 // NewListServices creates a tool that lists all Google Cloud services
 func NewListServices(g *genkit.Genkit, client PricingClient) ai.Tool {
@@ -123,6 +123,7 @@ var gcpCoreServicePrefixes = []string{
 	"carbon ", "active assist", "recommender",
 	"backup and dr", "cloud console",
 	"gemini",
+	"license manager",
 }
 
 func isCoreGCPService(displayName string) bool {

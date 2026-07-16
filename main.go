@@ -52,6 +52,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create Pricing API client: %v", err)
 	}
+	// Merge Catalog-absent curated pricing (License Manager / Office SPLA).
+	pricingClientWrapped := tools.WithSupplemental(pricingClient)
 
 	// Create FreeTierService for free tier information retrieval
 	freeTierService := freetier.NewService()
@@ -59,11 +61,11 @@ func main() {
 
 	// Define tools
 	toolList := []ai.Tool{
-		tools.NewGetEstimationGuide(g, pricingClient, freeTierService), // Should be called first to understand requirements
-		tools.NewListServices(g, pricingClient),
-		tools.NewListSKUs(g, pricingClient),
-		tools.NewGetSKUPrice(g, pricingClient),
-		tools.NewEstimateCost(g, pricingClient, freeTierService), // Now includes free tier auto-apply
+		tools.NewGetEstimationGuide(g, pricingClientWrapped, freeTierService), // Should be called first to understand requirements
+		tools.NewListServices(g, pricingClientWrapped),
+		tools.NewListSKUs(g, pricingClientWrapped),
+		tools.NewGetSKUPrice(g, pricingClientWrapped),
+		tools.NewEstimateCost(g, pricingClientWrapped, freeTierService), // Now includes free tier auto-apply
 	}
 
 	// Log registered tools

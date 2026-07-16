@@ -58,5 +58,10 @@ func getServiceAliases() map[string]string {
 		"2nd gen functions":   "cloud functions",
 		"pubsub":              "pub/sub",
 		"cloud pubsub":        "pub/sub",
+		"license manager":  "license manager (microsoft office spla)",
+		"office":           "license manager (microsoft office spla)",
+		"microsoft office": "license manager (microsoft office spla)",
+		"office spla":      "license manager (microsoft office spla)",
+		"spla":             "license manager (microsoft office spla)",
 	}
 }

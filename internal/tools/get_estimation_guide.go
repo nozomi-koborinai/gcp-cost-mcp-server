@@ -96,6 +96,17 @@ func runGetEstimationGuide(ctx context.Context, pricingClient PricingClient, fre
 		return nil, fmt.Errorf("service_name is required")
 	}
 
+	// Catalog-absent products (License Manager / Office SPLA) get a curated guide.
+	if guide := supplementalGuide(input.ServiceName); guide != nil {
+		if freeTierService != nil {
+			guide.FreeTier = &FreeTierSummary{Available: false}
+		}
+		return &GetEstimationGuideOutput{
+			Guide:             *guide,
+			SuggestedQuestion: buildSuggestedQuestion(guide),
+		}, nil
+	}
+
 	// Find the service ID
 	serviceID, displayName, err := findServiceByName(ctx, pricingClient, input.ServiceName)
 	if err != nil {

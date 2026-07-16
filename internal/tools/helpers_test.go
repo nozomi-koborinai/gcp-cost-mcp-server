@@ -23,6 +23,8 @@ func TestGetServiceAliases(t *testing.T) {
 		{"gae", "app engine"},
 		{"gce", "compute engine"},
 		{"pubsub", "pub/sub"},
+		{"office", "license manager (microsoft office spla)"},
+		{"spla", "license manager (microsoft office spla)"},
 	}
 
 	for _, tt := range tests {
