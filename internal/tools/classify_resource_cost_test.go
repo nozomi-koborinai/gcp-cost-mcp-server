@@ -5,8 +5,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/firebase/genkit/go/genkit"
 	"github.com/nozomi-koborinai/gcp-cost-mcp-server/internal/pricing/supplemental"
 )
+
+func TestNewClassifyResourceCost_DefinesToolSchema(t *testing.T) {
+	g := genkit.Init(context.Background())
+	tool := NewClassifyResourceCost(g, WithSupplemental(&fakePricingClient{}))
+	if tool == nil {
+		t.Fatal("NewClassifyResourceCost returned nil")
+	}
+	if tool.Name() != "classify_resource_cost" {
+		t.Fatalf("tool name = %q, want classify_resource_cost", tool.Name())
+	}
+}
 
 func TestRunClassifyResourceCost_LicenseManagerEstimate(t *testing.T) {
 	client := WithSupplemental(&fakePricingClient{})
