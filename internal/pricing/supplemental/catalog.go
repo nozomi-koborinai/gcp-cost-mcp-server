@@ -25,6 +25,10 @@ const (
 	// (e.g. license_count), not from metered runtime usage.
 	BillingModelExistence = "existence"
 
+	// BillingTriggerConfigurationCreated means billing starts when the
+	// billable configuration is created.
+	BillingTriggerConfigurationCreated = "configuration_created"
+
 	officeSourceURL = "https://cloud.google.com/compute/docs/instances/windows/ms-office"
 )
 
@@ -41,6 +45,7 @@ type SKU struct {
 	Unit            string
 	UnitDescription string
 	BillingModel    string
+	BillingTrigger  string
 	BillingNotes    []string
 	SourceURL       string
 	Aliases         []string
@@ -95,6 +100,7 @@ var catalog = []Service{
 				Unit:            "mo",
 				UnitDescription: "user / month",
 				BillingModel:    BillingModelExistence,
+				BillingTrigger:  BillingTriggerConfigurationCreated,
 				BillingNotes: []string{
 					"Billed by authorized license count (existence), not by VM runtime or actual Office usage.",
 					"Billing starts when a License Configuration is created; charges are not prorated within the calendar month.",
@@ -122,9 +128,9 @@ var catalog = []Service{
 			},
 			{
 				Name:        "product",
-				Description: "License Manager product. Currently documented: Microsoft Office LTSC 2021 Professional Plus (SPLA product_id ProPlusSPLA2021Volume).",
+				Description: "License Manager product ID. The currently priced product is Office2021ProfessionalPlus (Microsoft Office LTSC 2021 Professional Plus).",
 				Required:    true,
-				Examples:    []string{"Office LTSC 2021 Professional Plus"},
+				Examples:    []string{"Office2021ProfessionalPlus"},
 			},
 		},
 		PricingFactors: []string{
@@ -220,16 +226,13 @@ func FindSKU(skuID string) *SKU {
 // the service API (for example, Office2021ProfessionalPlus).
 func FindSKUByProductID(serviceID, productID string) *SKU {
 	normalized := strings.TrimSpace(productID)
-	if slash := strings.LastIndex(normalized, "/"); slash >= 0 {
-		normalized = normalized[slash+1:]
-	}
 	for i := range catalog {
 		if catalog[i].ServiceID != serviceID {
 			continue
 		}
 		for j := range catalog[i].SKUs {
 			for _, candidate := range catalog[i].SKUs[j].ProductIDs {
-				if strings.EqualFold(candidate, normalized) {
+				if candidate == normalized {
 					sku := catalog[i].SKUs[j]
 					return &sku
 				}

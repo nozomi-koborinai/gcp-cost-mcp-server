@@ -20,7 +20,8 @@
     "estimate_period": "calendar_month",
     "currency_code": "USD",
     "price_per_unit": 21.4,
-    "estimated_monthly_cost": 214,
+    "estimate_basis": "authorized_count_baseline",
+    "estimated_monthly_baseline": 214,
     "source_url": "https://cloud.google.com/compute/docs/instances/windows/ms-office",
     "billing_notes": [
       "Billed by authorized license count (existence), not by VM runtime or actual Office usage.",
@@ -28,6 +29,9 @@
       "Reducing or deactivating licenses takes effect in the next calendar month; increases apply immediately.",
       "Terraform resource google_license_manager_configuration bills via license_count.",
       "List price sourced from Google Cloud docs; may change — verify SourceURL."
+    ],
+    "warnings": [
+      "This is an authorized-count baseline, not a bill forecast; current-month count reductions and user overages require billing history and usage data."
     ]
   }
 }

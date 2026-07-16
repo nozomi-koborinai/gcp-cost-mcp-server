@@ -18,6 +18,28 @@ func TestNewClassifyResourceCost_DefinesToolSchema(t *testing.T) {
 	if tool.Name() != "classify_resource_cost" {
 		t.Fatalf("tool name = %q, want classify_resource_cost", tool.Name())
 	}
+
+	definition := tool.Definition()
+	properties, ok := definition.InputSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("input schema properties = %#v, want object", definition.InputSchema["properties"])
+	}
+	wantTypes := map[string]string{
+		"resource_type": "string",
+		"product":       "string",
+		"license_count": "integer",
+		"active":        "boolean",
+		"currency_code": "string",
+	}
+	for name, wantType := range wantTypes {
+		property, ok := properties[name].(map[string]any)
+		if !ok {
+			t.Fatalf("input schema property %q is missing: %#v", name, properties[name])
+		}
+		if gotType := property["type"]; gotType != wantType {
+			t.Fatalf("input schema property %q type = %v, want %s", name, gotType, wantType)
+		}
+	}
 }
 
 func TestRunClassifyResourceCost_LicenseManagerEstimate(t *testing.T) {
@@ -25,10 +47,8 @@ func TestRunClassifyResourceCost_LicenseManagerEstimate(t *testing.T) {
 
 	out, err := runClassifyResourceCost(context.Background(), client, ClassifyResourceCostInput{
 		ResourceType: "google_license_manager_configuration.office",
-		Attributes: map[string]any{
-			"product":       "Office2021ProfessionalPlus",
-			"license_count": 10,
-		},
+		Product:      "Office2021ProfessionalPlus",
+		LicenseCount: intPointer(10),
 	})
 	if err != nil {
 		t.Fatalf("runClassifyResourceCost: %v", err)
@@ -56,13 +76,17 @@ func TestRunClassifyResourceCost_LicenseManagerEstimate(t *testing.T) {
 	if got.PricePerUnit == nil || *got.PricePerUnit != 21.40 {
 		t.Fatalf("PricePerUnit = %v, want 21.40", got.PricePerUnit)
 	}
-	if got.EstimatedMonthlyCost == nil || *got.EstimatedMonthlyCost != 214 {
-		t.Fatalf("EstimatedMonthlyCost = %v, want 214", got.EstimatedMonthlyCost)
+	if got.EstimateBasis != "authorized_count_baseline" {
+		t.Fatalf("EstimateBasis = %q, want authorized_count_baseline", got.EstimateBasis)
+	}
+	if got.EstimatedBaseline == nil || *got.EstimatedBaseline != 214 {
+		t.Fatalf("EstimatedBaseline = %v, want 214", got.EstimatedBaseline)
 	}
 	if got.SourceURL == "" || len(got.BillingNotes) == 0 {
 		t.Fatalf("expected source and billing notes, got source=%q notes=%v", got.SourceURL, got.BillingNotes)
 	}
-	if len(got.MissingAttributes) != 0 || len(got.Warnings) != 0 {
+	if len(got.MissingAttributes) != 0 ||
+		!warningsContain(got.Warnings, "authorized-count baseline") {
 		t.Fatalf("unexpected missing attributes or warnings: %v / %v", got.MissingAttributes, got.Warnings)
 	}
 }
@@ -71,10 +95,8 @@ func TestRunClassifyResourceCost_TerraformAddress(t *testing.T) {
 	client := WithSupplemental(&fakePricingClient{})
 	out, err := runClassifyResourceCost(context.Background(), client, ClassifyResourceCostInput{
 		ResourceType: `module.desktop.google_license_manager_configuration.office["primary"]`,
-		Attributes: map[string]any{
-			"product":       "projects/p/locations/us-central1/products/Office2021ProfessionalPlus",
-			"license_count": "2",
-		},
+		Product:      "Office2021ProfessionalPlus",
+		LicenseCount: intPointer(2),
 	})
 	if err != nil {
 		t.Fatalf("runClassifyResourceCost: %v", err)
@@ -82,12 +104,30 @@ func TestRunClassifyResourceCost_TerraformAddress(t *testing.T) {
 	if out.Classification.ResourceType != "google_license_manager_configuration" {
 		t.Fatalf("ResourceType = %q", out.Classification.ResourceType)
 	}
-	if out.Classification.EstimatedMonthlyCost == nil || *out.Classification.EstimatedMonthlyCost != 42.8 {
-		t.Fatalf("EstimatedMonthlyCost = %v, want 42.8", out.Classification.EstimatedMonthlyCost)
+	if out.Classification.EstimatedBaseline == nil || *out.Classification.EstimatedBaseline != 42.8 {
+		t.Fatalf("EstimatedBaseline = %v, want 42.8", out.Classification.EstimatedBaseline)
 	}
 }
 
-func TestRunClassifyResourceCost_MissingAttributesStillFlagsExistenceBilling(t *testing.T) {
+func TestRunClassifyResourceCost_DoesNotMatchIndexKeyOrModuleName(t *testing.T) {
+	resourceAddresses := []string{
+		`google_compute_instance.vm["google_license_manager_configuration"]`,
+		"module.google_license_manager_configuration.google_compute_instance.vm",
+	}
+	for _, resourceAddress := range resourceAddresses {
+		out, err := runClassifyResourceCost(context.Background(), nil, ClassifyResourceCostInput{
+			ResourceType: resourceAddress,
+		})
+		if err != nil {
+			t.Fatalf("runClassifyResourceCost(%q): %v", resourceAddress, err)
+		}
+		if out.Classification.Matched {
+			t.Fatalf("resource address %q incorrectly matched License Manager", resourceAddress)
+		}
+	}
+}
+
+func TestRunClassifyResourceCost_MissingAttributesAvoidProductAssumptions(t *testing.T) {
 	out, err := runClassifyResourceCost(context.Background(), nil, ClassifyResourceCostInput{
 		ResourceType: "google_license_manager_configuration",
 	})
@@ -102,22 +142,24 @@ func TestRunClassifyResourceCost_MissingAttributesStillFlagsExistenceBilling(t *
 	if got.PricingAvailable {
 		t.Fatal("PricingAvailable = true without product")
 	}
-	if got.BillingModel != supplemental.BillingModelExistence {
-		t.Fatalf("BillingModel = %q, want existence", got.BillingModel)
+	if got.BillingModel != "" || got.BillingTrigger != "" {
+		t.Fatalf("product-specific billing assigned without product: model=%q trigger=%q",
+			got.BillingModel, got.BillingTrigger)
 	}
 	if !containsString(got.MissingAttributes, "product") ||
 		!containsString(got.MissingAttributes, "license_count") {
 		t.Fatalf("MissingAttributes = %v, want product and license_count", got.MissingAttributes)
+	}
+	if !warningsContain(got.Warnings, "product-specific") {
+		t.Fatalf("Warnings = %v, want product-specific billing warning", got.Warnings)
 	}
 }
 
 func TestRunClassifyResourceCost_UnsupportedProductDoesNotUseOfficePrice(t *testing.T) {
 	out, err := runClassifyResourceCost(context.Background(), nil, ClassifyResourceCostInput{
 		ResourceType: "google_license_manager_configuration",
-		Attributes: map[string]any{
-			"product":       "MicrosoftSQLServer2022Enterprise",
-			"license_count": 2,
-		},
+		Product:      "MicrosoftSQLServer2022Enterprise",
+		LicenseCount: intPointer(2),
 	})
 	if err != nil {
 		t.Fatalf("runClassifyResourceCost: %v", err)
@@ -127,8 +169,10 @@ func TestRunClassifyResourceCost_UnsupportedProductDoesNotUseOfficePrice(t *test
 	if !got.Matched || got.PricingAvailable {
 		t.Fatalf("Matched/PricingAvailable = %v/%v, want true/false", got.Matched, got.PricingAvailable)
 	}
-	if got.SKUID != "" || got.EstimatedMonthlyCost != nil {
-		t.Fatalf("unsupported product received Office pricing: sku=%q estimate=%v", got.SKUID, got.EstimatedMonthlyCost)
+	if got.SKUID != "" || got.EstimatedBaseline != nil ||
+		got.BillingModel != "" || got.BillingTrigger != "" {
+		t.Fatalf("unsupported product received Office metadata: sku=%q estimate=%v model=%q trigger=%q",
+			got.SKUID, got.EstimatedBaseline, got.BillingModel, got.BillingTrigger)
 	}
 	if !warningsContain(got.Warnings, "No supplemental price") {
 		t.Fatalf("Warnings = %v, want unsupported-price warning", got.Warnings)
@@ -150,15 +194,13 @@ func TestRunClassifyResourceCost_UnknownIsNotReportedAsFree(t *testing.T) {
 	}
 }
 
-func TestRunClassifyResourceCost_InvalidQuantityKeepsClassification(t *testing.T) {
+func TestRunClassifyResourceCost_InvalidQuantityAndInactiveSuppressEstimate(t *testing.T) {
 	client := WithSupplemental(&fakePricingClient{})
 	out, err := runClassifyResourceCost(context.Background(), client, ClassifyResourceCostInput{
 		ResourceType: "google_license_manager_configuration",
-		Attributes: map[string]any{
-			"product":       "Office2021ProfessionalPlus",
-			"license_count": 1.5,
-			"active":        false,
-		},
+		Product:      "Office2021ProfessionalPlus",
+		LicenseCount: intPointer(-1),
+		Active:       boolPointer(false),
 	})
 	if err != nil {
 		t.Fatalf("runClassifyResourceCost: %v", err)
@@ -168,12 +210,58 @@ func TestRunClassifyResourceCost_InvalidQuantityKeepsClassification(t *testing.T
 	if !got.Matched || !got.PricingAvailable {
 		t.Fatalf("Matched/PricingAvailable = %v/%v, want true/true", got.Matched, got.PricingAvailable)
 	}
-	if got.Quantity != nil || got.EstimatedMonthlyCost != nil {
-		t.Fatalf("invalid quantity should not produce estimate: quantity=%v estimate=%v", got.Quantity, got.EstimatedMonthlyCost)
+	if got.Quantity != nil || got.EstimatedBaseline != nil {
+		t.Fatalf("invalid quantity should not produce estimate: quantity=%v estimate=%v", got.Quantity, got.EstimatedBaseline)
 	}
-	if !warningsContain(got.Warnings, "whole number") ||
-		!warningsContain(got.Warnings, "next month") {
-		t.Fatalf("Warnings = %v, want whole-number and deactivation warnings", got.Warnings)
+	if !warningsContain(got.Warnings, "non-negative") ||
+		!warningsContain(got.Warnings, "previous count") {
+		t.Fatalf("Warnings = %v, want count and deactivation warnings", got.Warnings)
+	}
+}
+
+func TestRunClassifyResourceCost_InactiveValidCountSuppressesAmbiguousBaseline(t *testing.T) {
+	client := WithSupplemental(&fakePricingClient{})
+	out, err := runClassifyResourceCost(context.Background(), client, ClassifyResourceCostInput{
+		ResourceType: "google_license_manager_configuration",
+		Product:      "Office2021ProfessionalPlus",
+		LicenseCount: intPointer(10),
+		Active:       boolPointer(false),
+	})
+	if err != nil {
+		t.Fatalf("runClassifyResourceCost: %v", err)
+	}
+	if !out.Classification.PricingAvailable {
+		t.Fatal("PricingAvailable = false, want unit price to remain available")
+	}
+	if out.Classification.EstimatedBaseline != nil {
+		t.Fatalf("inactive resource received ambiguous baseline: %v", out.Classification.EstimatedBaseline)
+	}
+	if !warningsContain(out.Classification.Warnings, "previous count") {
+		t.Fatalf("Warnings = %v, want current-month ambiguity warning", out.Classification.Warnings)
+	}
+}
+
+func TestRunClassifyResourceCost_PricingFailurePreservesClassification(t *testing.T) {
+	client := WithSupplemental(&fakePricingClient{})
+	out, err := runClassifyResourceCost(context.Background(), client, ClassifyResourceCostInput{
+		ResourceType: "google_license_manager_configuration",
+		Product:      "Office2021ProfessionalPlus",
+		LicenseCount: intPointer(10),
+		CurrencyCode: "JPY",
+	})
+	if err != nil {
+		t.Fatalf("runClassifyResourceCost: %v", err)
+	}
+	got := out.Classification
+	if !got.Matched || got.PricingAvailable {
+		t.Fatalf("Matched/PricingAvailable = %v/%v, want true/false", got.Matched, got.PricingAvailable)
+	}
+	if got.SKUID != supplemental.SKUIDOfficeLTSC2021ProPlus ||
+		got.BillingModel != supplemental.BillingModelExistence {
+		t.Fatalf("classification lost after pricing failure: %+v", got)
+	}
+	if got.EstimatedBaseline != nil || !warningsContain(got.Warnings, "currency JPY") {
+		t.Fatalf("unexpected estimate/warnings: %v / %v", got.EstimatedBaseline, got.Warnings)
 	}
 }
 
@@ -199,4 +287,12 @@ func warningsContain(warnings []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func intPointer(value int) *int {
+	return &value
+}
+
+func boolPointer(value bool) *bool {
+	return &value
 }

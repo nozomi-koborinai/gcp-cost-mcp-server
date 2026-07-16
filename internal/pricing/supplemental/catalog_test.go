@@ -54,6 +54,9 @@ func TestOfficeSKUPrice(t *testing.T) {
 	if sku.BillingModel != BillingModelExistence {
 		t.Fatalf("BillingModel = %q, want %q", sku.BillingModel, BillingModelExistence)
 	}
+	if sku.BillingTrigger != BillingTriggerConfigurationCreated {
+		t.Fatalf("BillingTrigger = %q, want %q", sku.BillingTrigger, BillingTriggerConfigurationCreated)
+	}
 	if sku.SourceURL == "" {
 		t.Fatal("SourceURL is empty")
 	}
@@ -82,24 +85,24 @@ func TestOfficeSKUPrice(t *testing.T) {
 }
 
 func TestFindSKUByProductID(t *testing.T) {
-	tests := []string{
-		"Office2021ProfessionalPlus",
-		"office2021professionalplus",
-		"projects/example/locations/us-central1/products/Office2021ProfessionalPlus",
+	sku := FindSKUByProductID(ServiceIDLicenseManager, "Office2021ProfessionalPlus")
+	if sku == nil {
+		t.Fatal("FindSKUByProductID(Office2021ProfessionalPlus) = nil")
 	}
-	for _, productID := range tests {
-		sku := FindSKUByProductID(ServiceIDLicenseManager, productID)
-		if sku == nil {
-			t.Fatalf("FindSKUByProductID(%q) = nil", productID)
-		}
-		if sku.SKUID != SKUIDOfficeLTSC2021ProPlus {
-			t.Fatalf("FindSKUByProductID(%q).SKUID = %q, want %q",
-				productID, sku.SKUID, SKUIDOfficeLTSC2021ProPlus)
-		}
+	if sku.SKUID != SKUIDOfficeLTSC2021ProPlus {
+		t.Fatalf("FindSKUByProductID().SKUID = %q, want %q",
+			sku.SKUID, SKUIDOfficeLTSC2021ProPlus)
 	}
 
-	if sku := FindSKUByProductID(ServiceIDLicenseManager, "MicrosoftSQLServer2022Enterprise"); sku != nil {
-		t.Fatalf("unexpected supplemental SKU for unsupported product: %+v", sku)
+	unsupported := []string{
+		"office2021professionalplus",
+		"projects/example/locations/us-central1/products/Office2021ProfessionalPlus",
+		"MicrosoftSQLServer2022Enterprise",
+	}
+	for _, productID := range unsupported {
+		if sku := FindSKUByProductID(ServiceIDLicenseManager, productID); sku != nil {
+			t.Fatalf("unexpected supplemental SKU for product %q: %+v", productID, sku)
+		}
 	}
 }
 

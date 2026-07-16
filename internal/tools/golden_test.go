@@ -141,10 +141,8 @@ func TestGolden_ClassifyResourceCost(t *testing.T) {
 
 	out, err := runClassifyResourceCost(context.Background(), client, ClassifyResourceCostInput{
 		ResourceType: "google_license_manager_configuration.office",
-		Attributes: map[string]any{
-			"product":       "Office2021ProfessionalPlus",
-			"license_count": 10,
-		},
+		Product:      "Office2021ProfessionalPlus",
+		LicenseCount: intPointer(10),
 	})
 	if err != nil {
 		t.Fatalf("runClassifyResourceCost returned error: %v", err)

@@ -2,11 +2,8 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
-	"math"
-	"strconv"
 	"strings"
 
 	"github.com/firebase/genkit/go/ai"
@@ -20,36 +17,39 @@ const licenseManagerDocsURL = "https://cloud.google.com/compute/docs/instances/w
 // ClassifyResourceCostInput is a Terraform resource and the attributes needed
 // to classify its billing behavior and, when possible, estimate its cost.
 type ClassifyResourceCostInput struct {
-	ResourceType string         `json:"resource_type" jsonschema_description:"Terraform resource type or address (for example, google_license_manager_configuration or google_license_manager_configuration.office). REQUIRED."`
-	Attributes   map[string]any `json:"attributes,omitempty" jsonschema_description:"Known Terraform resource attributes. For google_license_manager_configuration, provide product and license_count. Values that are unknown during planning may be omitted."`
-	CurrencyCode string         `json:"currency_code,omitempty" jsonschema_description:"ISO-4217 currency code. Defaults to USD. Supplemental prices may only be available in their documented currency."`
+	ResourceType string `json:"resource_type" jsonschema_description:"Terraform resource type or address (for example, google_license_manager_configuration or google_license_manager_configuration.office). REQUIRED."`
+	Product      string `json:"product,omitempty" jsonschema_description:"License Manager product attribute. Currently priced: Office2021ProfessionalPlus."`
+	LicenseCount *int   `json:"license_count,omitempty" jsonschema_description:"License Manager license_count attribute (authorized users or packs). Required for a baseline estimate."`
+	Active       *bool  `json:"active,omitempty" jsonschema_description:"License Manager active attribute. Defaults to true in Terraform. A false value makes the current-month charge ambiguous because deactivation takes effect the following month."`
+	CurrencyCode string `json:"currency_code,omitempty" jsonschema_description:"ISO-4217 currency code. Defaults to USD. Supplemental prices may only be available in their documented currency."`
 }
 
 // ResourceCostClassification describes how a Terraform resource incurs cost.
 type ResourceCostClassification struct {
-	ResourceType         string   `json:"resource_type"`
-	Matched              bool     `json:"matched"`
-	PricingAvailable     bool     `json:"pricing_available"`
-	ServiceID            string   `json:"service_id,omitempty"`
-	ServiceName          string   `json:"service_name,omitempty"`
-	Product              string   `json:"product,omitempty"`
-	SupportedProducts    []string `json:"supported_products,omitempty"`
-	SKUID                string   `json:"sku_id,omitempty"`
-	SKUDisplayName       string   `json:"sku_display_name,omitempty"`
-	BillingModel         string   `json:"billing_model,omitempty"`
-	BillingTrigger       string   `json:"billing_trigger,omitempty"`
-	QuantityAttribute    string   `json:"quantity_attribute,omitempty"`
-	Quantity             *float64 `json:"quantity,omitempty"`
-	Unit                 string   `json:"unit,omitempty"`
-	UnitDescription      string   `json:"unit_description,omitempty"`
-	EstimatePeriod       string   `json:"estimate_period,omitempty"`
-	CurrencyCode         string   `json:"currency_code,omitempty"`
-	PricePerUnit         *float64 `json:"price_per_unit,omitempty"`
-	EstimatedMonthlyCost *float64 `json:"estimated_monthly_cost,omitempty"`
-	SourceURL            string   `json:"source_url,omitempty"`
-	MissingAttributes    []string `json:"missing_attributes,omitempty"`
-	BillingNotes         []string `json:"billing_notes,omitempty"`
-	Warnings             []string `json:"warnings,omitempty"`
+	ResourceType      string   `json:"resource_type"`
+	Matched           bool     `json:"matched"`
+	PricingAvailable  bool     `json:"pricing_available"`
+	ServiceID         string   `json:"service_id,omitempty"`
+	ServiceName       string   `json:"service_name,omitempty"`
+	Product           string   `json:"product,omitempty"`
+	SupportedProducts []string `json:"supported_products,omitempty"`
+	SKUID             string   `json:"sku_id,omitempty"`
+	SKUDisplayName    string   `json:"sku_display_name,omitempty"`
+	BillingModel      string   `json:"billing_model,omitempty"`
+	BillingTrigger    string   `json:"billing_trigger,omitempty"`
+	QuantityAttribute string   `json:"quantity_attribute,omitempty"`
+	Quantity          *float64 `json:"quantity,omitempty"`
+	Unit              string   `json:"unit,omitempty"`
+	UnitDescription   string   `json:"unit_description,omitempty"`
+	EstimatePeriod    string   `json:"estimate_period,omitempty"`
+	CurrencyCode      string   `json:"currency_code,omitempty"`
+	PricePerUnit      *float64 `json:"price_per_unit,omitempty"`
+	EstimateBasis     string   `json:"estimate_basis,omitempty"`
+	EstimatedBaseline *float64 `json:"estimated_monthly_baseline,omitempty"`
+	SourceURL         string   `json:"source_url,omitempty"`
+	MissingAttributes []string `json:"missing_attributes,omitempty"`
+	BillingNotes      []string `json:"billing_notes,omitempty"`
+	Warnings          []string `json:"warnings,omitempty"`
 }
 
 // ClassifyResourceCostOutput is the output of classify_resource_cost.
@@ -57,7 +57,7 @@ type ClassifyResourceCostOutput struct {
 	Classification ResourceCostClassification `json:"classification"`
 }
 
-const classifyResourceCostDescription = `Classifies the cost behavior of a Terraform resource and estimates a monthly cost when enough attributes are provided.
+const classifyResourceCostDescription = `Classifies the cost behavior of a Terraform resource and estimates an authorized-count monthly baseline when enough attributes are provided.
 
 The tool identifies whether billing is triggered by resource existence rather than runtime usage, returns the matching service/SKU and quantity attribute, and includes source-backed billing warnings.
 
@@ -72,9 +72,6 @@ type terraformResourceCostRule struct {
 	ServiceID         string
 	ProductAttribute  string
 	QuantityAttribute string
-	BillingModel      string
-	BillingTrigger    string
-	WholeUnits        bool
 	SourceURL         string
 }
 
@@ -84,9 +81,6 @@ var terraformResourceCostRules = []terraformResourceCostRule{
 		ServiceID:         supplemental.ServiceIDLicenseManager,
 		ProductAttribute:  "product",
 		QuantityAttribute: "license_count",
-		BillingModel:      supplemental.BillingModelExistence,
-		BillingTrigger:    "configuration_created",
-		WholeUnits:        true,
 		SourceURL:         licenseManagerDocsURL,
 	},
 }
@@ -123,8 +117,6 @@ func runClassifyResourceCost(ctx context.Context, client PricingClient, input Cl
 	}
 
 	classification.ServiceID = rule.ServiceID
-	classification.BillingModel = rule.BillingModel
-	classification.BillingTrigger = rule.BillingTrigger
 	classification.QuantityAttribute = rule.QuantityAttribute
 	classification.SupportedProducts = supplemental.ProductIDsForService(rule.ServiceID)
 	classification.SourceURL = rule.SourceURL
@@ -133,18 +125,13 @@ func runClassifyResourceCost(ctx context.Context, client PricingClient, input Cl
 		classification.ServiceName = svc.DisplayName
 	}
 
-	product, productOK := stringAttribute(input.Attributes, rule.ProductAttribute)
+	product := strings.TrimSpace(input.Product)
 	var sku *supplemental.SKU
-	switch {
-	case !productOK:
+	if product == "" {
 		classification.MissingAttributes = append(classification.MissingAttributes, rule.ProductAttribute)
 		classification.Warnings = append(classification.Warnings,
-			fmt.Sprintf("Provide %q to select a product-specific SKU and price.", rule.ProductAttribute))
-	case product == "":
-		classification.MissingAttributes = append(classification.MissingAttributes, rule.ProductAttribute)
-		classification.Warnings = append(classification.Warnings,
-			fmt.Sprintf("Attribute %q must be a product ID string.", rule.ProductAttribute))
-	default:
+			fmt.Sprintf("License Manager billing rules are product-specific; provide %q to select a billing model, SKU, and price.", rule.ProductAttribute))
+	} else {
 		classification.Product = product
 		sku = supplemental.FindSKUByProductID(rule.ServiceID, product)
 		if sku == nil {
@@ -154,174 +141,176 @@ func runClassifyResourceCost(ctx context.Context, client PricingClient, input Cl
 		}
 	}
 
-	quantity, quantityOK, quantityErr := numericAttribute(input.Attributes, rule.QuantityAttribute)
 	switch {
-	case quantityErr != nil:
-		classification.Warnings = append(classification.Warnings, quantityErr.Error())
-	case !quantityOK:
+	case input.LicenseCount == nil:
 		classification.MissingAttributes = append(classification.MissingAttributes, rule.QuantityAttribute)
 		classification.Warnings = append(classification.Warnings,
-			fmt.Sprintf("Provide %q to calculate the monthly estimate.", rule.QuantityAttribute))
-	case quantity < 0:
+			fmt.Sprintf("Provide %q to calculate an authorized-count monthly baseline.", rule.QuantityAttribute))
+	case *input.LicenseCount < 0:
 		classification.Warnings = append(classification.Warnings,
 			fmt.Sprintf("Attribute %q must be non-negative.", rule.QuantityAttribute))
-	case rule.WholeUnits && math.Trunc(quantity) != quantity:
-		classification.Warnings = append(classification.Warnings,
-			fmt.Sprintf("Attribute %q must be a whole number.", rule.QuantityAttribute))
 	default:
-		classification.Quantity = float64Pointer(quantity)
+		classification.Quantity = float64Pointer(float64(*input.LicenseCount))
 	}
 
-	if active, ok := boolAttribute(input.Attributes, "active"); ok && !active {
+	inactive := input.Active != nil && !*input.Active
+	if inactive {
 		classification.Warnings = append(classification.Warnings,
-			"Deactivation does not remove the charge for the current calendar month; it takes effect in the next month.")
+			"active=false does not reveal the current-month charge: deactivation takes effect in the next calendar month, so the previous count and deactivation date are required.")
 	}
 
 	if sku == nil {
 		return &ClassifyResourceCostOutput{Classification: classification}, nil
 	}
-	if client == nil {
-		return nil, fmt.Errorf("pricing client is required")
-	}
+
+	classification.SKUID = sku.SKUID
+	classification.SKUDisplayName = sku.DisplayName
+	classification.BillingModel = sku.BillingModel
+	classification.BillingTrigger = sku.BillingTrigger
+	classification.Unit = sku.Unit
+	classification.UnitDescription = sku.UnitDescription
+	classification.EstimatePeriod = "calendar_month"
+	classification.SourceURL = sku.SourceURL
+	classification.BillingNotes = append([]string(nil), sku.BillingNotes...)
 
 	currencyCode := input.CurrencyCode
 	if currencyCode == "" {
 		currencyCode = "USD"
 	}
+	classification.CurrencyCode = currencyCode
+	if client == nil {
+		classification.Warnings = append(classification.Warnings,
+			"Pricing could not be loaded because the pricing client is unavailable.")
+		return &ClassifyResourceCostOutput{Classification: classification}, nil
+	}
+
 	priceResp, err := client.GetSKUPrice(ctx, sku.SKUID, currencyCode)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get price for resource %s: %w", normalizedType, err)
+		classification.Warnings = append(classification.Warnings,
+			fmt.Sprintf("Pricing could not be loaded for currency %s: %v", currencyCode, err))
+		return &ClassifyResourceCostOutput{Classification: classification}, nil
 	}
 	rate, err := firstUsableRate(priceResp)
 	if err != nil {
-		return nil, fmt.Errorf("invalid pricing data for resource %s: %w", normalizedType, err)
+		classification.Warnings = append(classification.Warnings,
+			fmt.Sprintf("Pricing data is incomplete: %v", err))
+		return &ClassifyResourceCostOutput{Classification: classification}, nil
 	}
 	pricePerUnit, err := firstTierUnitPrice(rate)
 	if err != nil {
-		return nil, fmt.Errorf("invalid pricing data for resource %s: %w", normalizedType, err)
+		classification.Warnings = append(classification.Warnings,
+			fmt.Sprintf("Pricing data is incomplete: %v", err))
+		return &ClassifyResourceCostOutput{Classification: classification}, nil
 	}
 
 	classification.PricingAvailable = true
-	classification.SKUID = sku.SKUID
-	classification.SKUDisplayName = sku.DisplayName
 	classification.Unit = rate.UnitInfo.Unit
 	classification.UnitDescription = rate.UnitInfo.UnitDescription
-	classification.EstimatePeriod = "calendar_month"
 	classification.CurrencyCode = priceResp.CurrencyCode
 	classification.PricePerUnit = float64Pointer(pricePerUnit)
-	classification.SourceURL = sku.SourceURL
-	classification.BillingNotes = append([]string(nil), sku.BillingNotes...)
+	classification.EstimateBasis = "authorized_count_baseline"
 
-	if classification.Quantity != nil {
+	if classification.Quantity != nil && !inactive {
 		estimatedCost, err := pricing.CalculateCost(rate, *classification.Quantity)
 		if err != nil {
-			return nil, fmt.Errorf("failed to calculate cost for resource %s: %w", normalizedType, err)
+			classification.Warnings = append(classification.Warnings,
+				fmt.Sprintf("The authorized-count baseline could not be calculated: %v", err))
+			return &ClassifyResourceCostOutput{Classification: classification}, nil
 		}
-		classification.EstimatedMonthlyCost = float64Pointer(estimatedCost)
+		classification.EstimatedBaseline = float64Pointer(estimatedCost)
+		classification.Warnings = append(classification.Warnings,
+			"This is an authorized-count baseline, not a bill forecast; current-month count reductions and user overages require billing history and usage data.")
 	}
 
 	return &ClassifyResourceCostOutput{Classification: classification}, nil
 }
 
 func findTerraformResourceCostRule(resourceTypeOrAddress string) (*terraformResourceCostRule, string) {
-	trimmed := strings.TrimSpace(resourceTypeOrAddress)
-	segments := strings.FieldsFunc(trimmed, func(r rune) bool {
-		switch r {
-		case '.', '[', ']', '"', '\'', ' ', '\t', '\n':
-			return true
-		default:
-			return false
-		}
-	})
-
+	resourceType := terraformResourceType(resourceTypeOrAddress)
 	for i := range terraformResourceCostRules {
 		rule := &terraformResourceCostRules[i]
-		if trimmed == rule.ResourceType {
+		if resourceType == rule.ResourceType {
 			return rule, rule.ResourceType
 		}
-		for _, segment := range segments {
-			if segment == rule.ResourceType {
-				return rule, rule.ResourceType
-			}
+	}
+	return nil, resourceType
+}
+
+func terraformResourceType(resourceTypeOrAddress string) string {
+	trimmed := strings.TrimSpace(resourceTypeOrAddress)
+	if !strings.Contains(trimmed, ".") {
+		return trimmed
+	}
+
+	withoutIndices, ok := stripTerraformIndexExpressions(trimmed)
+	if !ok {
+		return trimmed
+	}
+	parts := strings.Split(withoutIndices, ".")
+	for _, part := range parts {
+		if part == "" {
+			return trimmed
 		}
 	}
-	return nil, trimmed
+
+	index := 0
+	for index+1 < len(parts) && parts[index] == "module" {
+		index += 2
+	}
+	// A managed resource address has exactly a type and name after any module
+	// path. Matching that structural position avoids treating an index key or
+	// module name as a resource type.
+	if len(parts)-index == 2 {
+		return parts[index]
+	}
+	return trimmed
 }
 
-func stringAttribute(attributes map[string]any, name string) (string, bool) {
-	if attributes == nil {
-		return "", false
-	}
-	value, ok := attributes[name]
-	if !ok || value == nil {
-		return "", false
-	}
-	text, ok := value.(string)
-	if !ok {
-		return "", true
-	}
-	return strings.TrimSpace(text), true
-}
+func stripTerraformIndexExpressions(address string) (string, bool) {
+	var result strings.Builder
+	depth := 0
+	var quote rune
+	escaped := false
 
-func numericAttribute(attributes map[string]any, name string) (float64, bool, error) {
-	if attributes == nil {
-		return 0, false, nil
-	}
-	value, ok := attributes[name]
-	if !ok || value == nil {
-		return 0, false, nil
+	for _, r := range address {
+		if depth == 0 {
+			if r == '[' {
+				depth = 1
+				continue
+			}
+			result.WriteRune(r)
+			continue
+		}
+
+		if quote != 0 {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if r == '\\' {
+				escaped = true
+				continue
+			}
+			if r == quote {
+				quote = 0
+			}
+			continue
+		}
+
+		switch r {
+		case '"', '\'':
+			quote = r
+		case '[':
+			depth++
+		case ']':
+			depth--
+		}
 	}
 
-	var number float64
-	var err error
-	switch v := value.(type) {
-	case float64:
-		number = v
-	case float32:
-		number = float64(v)
-	case int:
-		number = float64(v)
-	case int8:
-		number = float64(v)
-	case int16:
-		number = float64(v)
-	case int32:
-		number = float64(v)
-	case int64:
-		number = float64(v)
-	case uint:
-		number = float64(v)
-	case uint8:
-		number = float64(v)
-	case uint16:
-		number = float64(v)
-	case uint32:
-		number = float64(v)
-	case uint64:
-		number = float64(v)
-	case json.Number:
-		number, err = v.Float64()
-	case string:
-		number, err = strconv.ParseFloat(strings.TrimSpace(v), 64)
-	default:
-		err = fmt.Errorf("expected a number, got %T", value)
+	if depth != 0 || quote != 0 {
+		return address, false
 	}
-	if err != nil || math.IsNaN(number) || math.IsInf(number, 0) {
-		return 0, true, fmt.Errorf("attribute %q must be a finite number", name)
-	}
-	return number, true, nil
-}
-
-func boolAttribute(attributes map[string]any, name string) (bool, bool) {
-	if attributes == nil {
-		return false, false
-	}
-	value, ok := attributes[name]
-	if !ok || value == nil {
-		return false, false
-	}
-	boolean, ok := value.(bool)
-	return boolean, ok
+	return result.String(), true
 }
 
 func firstUsableRate(resp *pricing.GetPriceResponse) (*pricing.Rate, error) {

@@ -15,7 +15,7 @@ Instead of manually using the [Google Cloud Pricing Calculator](https://cloud.go
 | Tool | Description |
 |------|-------------|
 | `get_estimation_guide` | **Start here!** Dynamically generates estimation guides from SKU analysis for any GCP service |
-| `classify_resource_cost` | Classifies Terraform resource billing behavior and estimates known existence-based costs |
+| `classify_resource_cost` | Classifies Terraform resource billing behavior and estimates an authorized-count baseline |
 | `list_services` | Lists all available Google Cloud services with their IDs |
 | `list_skus` | Lists SKUs (billable items) for a specific service |
 | `get_sku_price` | Gets pricing details for a specific SKU |
@@ -80,14 +80,12 @@ The initial rule covers `google_license_manager_configuration`:
 ```json
 {
   "resource_type": "google_license_manager_configuration.office",
-  "attributes": {
-    "product": "Office2021ProfessionalPlus",
-    "license_count": 10
-  }
+  "product": "Office2021ProfessionalPlus",
+  "license_count": 10
 }
 ```
 
-The response reports `billing_model=existence`, identifies `license_count` as the quantity field, and estimates `$214.00` for the calendar month using the supplemental Office SPLA price. If `product` or `license_count` is unknown during planning, the tool still flags the billing trigger and reports the missing attributes without inventing an estimate.
+The response reports `billing_model=existence`, identifies `license_count` as the quantity field, and returns a `$214.00` authorized-count baseline for the calendar month using the supplemental Office SPLA price. It is not a bill forecast: overages and current-month count reductions require billing history and usage data. If `product` or `license_count` is unknown during planning, the tool reports the missing attributes without inventing product-specific billing behavior or an estimate.
 
 ## Quick Start
 
