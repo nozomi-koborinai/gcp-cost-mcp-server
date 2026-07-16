@@ -43,6 +43,10 @@ type CostBreakdown struct {
 	BillableUsage     float64 `json:"billable_usage"`
 	FreeTierNote      string  `json:"free_tier_note,omitempty"`
 	FreeTierSourceURL string  `json:"free_tier_source_url,omitempty"`
+	// Supplemental / Catalog-absent billing metadata (Issue #18)
+	BillingModel string   `json:"billing_model,omitempty"`
+	BillingNotes []string `json:"billing_notes,omitempty"`
+	SourceURL    string   `json:"source_url,omitempty"`
 }
 
 // EstimateCostOutput is the output of the estimate_cost tool
@@ -226,6 +230,7 @@ func runEstimateCost(ctx context.Context, client PricingClient, freeTierService 
 		)
 	}
 	estimate.CostBreakdown = breakdownDesc
+	enrichCostBreakdown(&estimate)
 
 	return &EstimateCostOutput{
 		Estimate: estimate,

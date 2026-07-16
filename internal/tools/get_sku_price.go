@@ -41,6 +41,9 @@ type PriceInfo struct {
 	Tiers            []PricingTier        `json:"tiers"`
 	AggregationInfo  string               `json:"aggregation_info,omitempty"`
 	AllPricingModels []ConsumptionPricing `json:"all_pricing_models,omitempty"`
+	BillingModel     string               `json:"billing_model,omitempty"`
+	BillingNotes     []string             `json:"billing_notes,omitempty"`
+	SourceURL        string               `json:"source_url,omitempty"`
 }
 
 // GetSKUPriceOutput is the output of the get_sku_price tool
@@ -137,6 +140,8 @@ func runGetSKUPrice(ctx context.Context, client PricingClient, input GetSKUPrice
 	if len(allModels) > 0 {
 		priceInfo.AllPricingModels = allModels
 	}
+
+	enrichPriceInfo(&priceInfo)
 
 	return &GetSKUPriceOutput{
 		Price: priceInfo,

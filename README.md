@@ -57,6 +57,7 @@ graph TB
 - **Dynamic Guide Generation**: Guides are generated dynamically by analyzing SKUs from the Cloud Billing Catalog API
 - **Free Tier Information**: Automatically fetched from GCP documentation and included in the guide
 - **Universal Coverage**: Works with all GCP services - no hardcoded service list
+- **Catalog-absent products**: A small curated supplemental catalog covers products missing from the Cloud Billing Catalog API (currently License Manager / Microsoft Office SPLA). These use synthetic `SUPPLEMENTAL-*` IDs and expose `billing_model=existence` when cost accrues from resource existence (e.g. `license_count`), not metered runtime.
 
 The tool analyzes available SKUs to determine:
 - Required parameters (region, instance type, storage, etc.)
@@ -64,6 +65,7 @@ The tool analyzes available SKUs to determine:
 - Free tier quotas (when available)
 - Cost optimization tips
 
+> **Note**: Supplemental list prices are taken from official Google Cloud documentation and may lag docs updates. Prefer the `source_url` on supplemental SKU/price responses when verifying.
 ## Quick Start
 
 ### Prerequisites
@@ -361,9 +363,11 @@ gcp-cost-mcp-server/
 │   │   ├── scraper.go           # GCP documentation scraper
 │   │   └── patterns.go          # Regex patterns for extraction
 │   ├── pricing/
-│   │   └── client.go            # Cloud Billing Catalog API client
+│   │   ├── client.go            # Cloud Billing Catalog API client
+│   │   └── supplemental/        # Curated Catalog-absent pricing (License Manager / Office SPLA)
 │   └── tools/
 │       ├── deps.go                  # Consumer-side interfaces (PricingClient, FreeTierProvider)
+│       ├── supplemental_client.go   # Merges supplemental catalog into PricingClient
 │       ├── get_estimation_guide.go  # Dynamic guide generator
 │       ├── guide_builder.go         # SKU analysis for guide generation
 │       ├── service_lookup.go        # Service name → service ID resolution
@@ -372,7 +376,6 @@ gcp-cost-mcp-server/
 │       ├── list_skus.go
 │       └── get_sku_price.go
 ```
-
 ### Tool Design
 
 ```mermaid

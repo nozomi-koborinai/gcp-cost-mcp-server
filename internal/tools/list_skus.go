@@ -23,10 +23,13 @@ type ListSKUsInput struct {
 
 // SKUInfo represents simplified SKU information
 type SKUInfo struct {
-	SKUID       string   `json:"sku_id"`
-	DisplayName string   `json:"display_name"`
-	Region      string   `json:"region,omitempty"`
-	Categories  []string `json:"categories,omitempty"`
+	SKUID        string   `json:"sku_id"`
+	DisplayName  string   `json:"display_name"`
+	Region       string   `json:"region,omitempty"`
+	Categories   []string `json:"categories,omitempty"`
+	BillingModel string   `json:"billing_model,omitempty"`
+	BillingNotes []string `json:"billing_notes,omitempty"`
+	SourceURL    string   `json:"source_url,omitempty"`
 }
 
 // ListSKUsOutput is the output of the list_skus tool
@@ -37,7 +40,7 @@ type ListSKUsOutput struct {
 	ServiceID     string    `json:"service_id"`
 }
 
-const listSKUsDescription = "Lists SKUs (Stock Keeping Units) for a specific Google Cloud service. Each SKU represents a billable item with its own pricing. Use the sku_id to get detailed pricing information. Supports optional filtering by region, keyword (display name), and category to quickly find specific SKUs without manual pagination."
+const listSKUsDescription = "Lists SKUs (Stock Keeping Units) for a specific Google Cloud service. Each SKU represents a billable item with its own pricing. Use the sku_id to get detailed pricing information. Supports optional filtering by region, keyword (display name), and category to quickly find specific SKUs without manual pagination. Includes curated Catalog-absent products (e.g. License Manager / Office SPLA) when querying their supplemental service_id; those SKUs may include billing_model=existence."
 
 // NewListSKUs creates a tool that lists SKUs for a specific Google Cloud service
 func NewListSKUs(g *genkit.Genkit, client PricingClient) ai.Tool {
@@ -107,12 +110,12 @@ func convertSKUs(raw []pricing.SKU) []SKUInfo {
 			region = "global"
 		}
 
-		skus[i] = SKUInfo{
+		skus[i] = enrichSKUInfo(SKUInfo{
 			SKUID:       sku.SKUID,
 			DisplayName: sku.DisplayName,
 			Region:      region,
 			Categories:  categories,
-		}
+		})
 	}
 	return skus
 }
