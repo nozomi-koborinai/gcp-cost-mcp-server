@@ -1,0 +1,37 @@
+{
+  "classification": {
+    "resource_type": "google_license_manager_configuration",
+    "matched": true,
+    "pricing_available": true,
+    "service_id": "SUPPLEMENTAL-LICENSE-MANAGER",
+    "service_name": "License Manager (Microsoft Office SPLA)",
+    "product": "Office2021ProfessionalPlus",
+    "supported_products": [
+      "Office2021ProfessionalPlus"
+    ],
+    "sku_id": "SUPPLEMENTAL-OFFICE-LTSC-2021-PROPLUS",
+    "sku_display_name": "Microsoft Office LTSC 2021 Professional Plus (per user / month)",
+    "billing_model": "existence",
+    "billing_trigger": "configuration_created",
+    "quantity_attribute": "license_count",
+    "quantity": 10,
+    "unit": "mo",
+    "unit_description": "user / month",
+    "estimate_period": "calendar_month",
+    "currency_code": "USD",
+    "price_per_unit": 21.4,
+    "estimate_basis": "authorized_count_baseline",
+    "estimated_monthly_baseline": 214,
+    "source_url": "https://cloud.google.com/compute/docs/instances/windows/ms-office",
+    "billing_notes": [
+      "Billed by authorized license count (existence), not by VM runtime or actual Office usage.",
+      "Billing starts when a License Configuration is created; charges are not prorated within the calendar month.",
+      "Reducing or deactivating licenses takes effect in the next calendar month; increases apply immediately.",
+      "Terraform resource google_license_manager_configuration bills via license_count.",
+      "List price sourced from Google Cloud docs; may change — verify SourceURL."
+    ],
+    "warnings": [
+      "This is an authorized-count baseline, not a bill forecast; current-month count reductions and user overages require billing history and usage data."
+    ]
+  }
+}

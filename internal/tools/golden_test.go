@@ -134,3 +134,19 @@ func TestGolden_GetSKUPrice(t *testing.T) {
 		})
 	}
 }
+
+func TestGolden_ClassifyResourceCost(t *testing.T) {
+	g := goldie.New(t)
+	client := WithSupplemental(&fakePricingClient{})
+
+	out, err := runClassifyResourceCost(context.Background(), client, ClassifyResourceCostInput{
+		ResourceType: "google_license_manager_configuration.office",
+		Product:      "Office2021ProfessionalPlus",
+		LicenseCount: numberPointer(10),
+	})
+	if err != nil {
+		t.Fatalf("runClassifyResourceCost returned error: %v", err)
+	}
+
+	g.AssertJson(t, "classify_resource_cost_office_spla", out)
+}

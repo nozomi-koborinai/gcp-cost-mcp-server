@@ -25,6 +25,10 @@ const (
 	// (e.g. license_count), not from metered runtime usage.
 	BillingModelExistence = "existence"
 
+	// BillingTriggerConfigurationCreated means billing starts when the
+	// billable configuration is created.
+	BillingTriggerConfigurationCreated = "configuration_created"
+
 	officeSourceURL = "https://cloud.google.com/compute/docs/instances/windows/ms-office"
 )
 
@@ -33,6 +37,7 @@ type SKU struct {
 	SKUID           string
 	DisplayName     string
 	ServiceID       string
+	ProductIDs      []string
 	Region          string
 	Categories      []string
 	PricePerUnit    float64
@@ -40,6 +45,7 @@ type SKU struct {
 	Unit            string
 	UnitDescription string
 	BillingModel    string
+	BillingTrigger  string
 	BillingNotes    []string
 	SourceURL       string
 	Aliases         []string
@@ -86,6 +92,7 @@ var catalog = []Service{
 				SKUID:           SKUIDOfficeLTSC2021ProPlus,
 				DisplayName:     "Microsoft Office LTSC 2021 Professional Plus (per user / month)",
 				ServiceID:       ServiceIDLicenseManager,
+				ProductIDs:      []string{"Office2021ProfessionalPlus"},
 				Region:          "global",
 				Categories:      []string{"License", "Microsoft Office", "SPLA"},
 				PricePerUnit:    21.40,
@@ -93,6 +100,7 @@ var catalog = []Service{
 				Unit:            "mo",
 				UnitDescription: "user / month",
 				BillingModel:    BillingModelExistence,
+				BillingTrigger:  BillingTriggerConfigurationCreated,
 				BillingNotes: []string{
 					"Billed by authorized license count (existence), not by VM runtime or actual Office usage.",
 					"Billing starts when a License Configuration is created; charges are not prorated within the calendar month.",
@@ -120,9 +128,9 @@ var catalog = []Service{
 			},
 			{
 				Name:        "product",
-				Description: "License Manager product. Currently documented: Microsoft Office LTSC 2021 Professional Plus (SPLA product_id ProPlusSPLA2021Volume).",
+				Description: "License Manager product ID. The currently priced product is Office2021ProfessionalPlus (Microsoft Office LTSC 2021 Professional Plus).",
 				Required:    true,
-				Examples:    []string{"Office LTSC 2021 Professional Plus"},
+				Examples:    []string{"Office2021ProfessionalPlus"},
 			},
 		},
 		PricingFactors: []string{
@@ -212,6 +220,39 @@ func FindSKU(skuID string) *SKU {
 		}
 	}
 	return nil
+}
+
+// FindSKUByProductID returns the supplemental SKU for a product exposed by
+// the service API (for example, Office2021ProfessionalPlus).
+func FindSKUByProductID(serviceID, productID string) *SKU {
+	normalized := strings.TrimSpace(productID)
+	for i := range catalog {
+		if catalog[i].ServiceID != serviceID {
+			continue
+		}
+		for j := range catalog[i].SKUs {
+			for _, candidate := range catalog[i].SKUs[j].ProductIDs {
+				if candidate == normalized {
+					sku := catalog[i].SKUs[j]
+					return &sku
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// ProductIDsForService returns product IDs with supplemental pricing.
+func ProductIDsForService(serviceID string) []string {
+	svc := FindService(serviceID)
+	if svc == nil {
+		return nil
+	}
+	var productIDs []string
+	for _, sku := range svc.SKUs {
+		productIDs = append(productIDs, sku.ProductIDs...)
+	}
+	return productIDs
 }
 
 // LookupSKUMeta returns supplemental SKU metadata when skuID is curated.

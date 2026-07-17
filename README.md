@@ -15,6 +15,7 @@ Instead of manually using the [Google Cloud Pricing Calculator](https://cloud.go
 | Tool | Description |
 |------|-------------|
 | `get_estimation_guide` | **Start here!** Dynamically generates estimation guides from SKU analysis for any GCP service |
+| `classify_resource_cost` | Classifies Terraform resource billing behavior and estimates an authorized-count baseline |
 | `list_services` | Lists all available Google Cloud services with their IDs |
 | `list_skus` | Lists SKUs (billable items) for a specific service |
 | `get_sku_price` | Gets pricing details for a specific SKU |
@@ -27,6 +28,8 @@ Each tool is **independent and stateless**. AI assistants autonomously decide wh
 ```mermaid
 graph TB
     guide["get_estimation_guide<br/>─────────────────<br/>IN: service_name<br/>OUT: required params, pricing<br/>factors, free tier info, tips<br/>─────────────────<br/>Internally resolves<br/>service &amp; SKU lookup"]
+
+    classify["classify_resource_cost<br/>─────────────────<br/>IN: Terraform resource type,<br/>resource attributes<br/>OUT: billing trigger, SKU,<br/>warnings, monthly estimate"]
 
     services["list_services<br/>─────────────────<br/>IN: name filter (opt)<br/>OUT: service_id, display_name"]
 
@@ -49,6 +52,7 @@ graph TB
 | **Multi-service** | Multiple `get_estimation_guide` + `estimate_cost` calls **in parallel** |
 | **Explore pricing** | `list_services` → `list_skus` → `get_sku_price` |
 | **Direct calculation** | `estimate_cost` with a known SKU ID |
+| **Terraform cost review** | `classify_resource_cost` for each resource and inspect existence-based billing warnings |
 
 ### Supported Services
 
@@ -66,6 +70,23 @@ The tool analyzes available SKUs to determine:
 - Cost optimization tips
 
 > **Note**: Supplemental list prices are taken from official Google Cloud documentation and may lag docs updates. Prefer the `source_url` on supplemental SKU/price responses when verifying.
+
+#### Terraform resource cost classification
+
+`classify_resource_cost` accepts a Terraform resource type (or full resource address) plus known attributes. It distinguishes an unsupported classification from a free resource: `matched=false` means only that no rule exists yet.
+
+The initial rule covers `google_license_manager_configuration`:
+
+```json
+{
+  "resource_type": "google_license_manager_configuration.office",
+  "product": "Office2021ProfessionalPlus",
+  "license_count": 10
+}
+```
+
+The response reports `billing_model=existence`, identifies `license_count` as the quantity field, and returns a `$214.00` authorized-count baseline for the calendar month using the supplemental Office SPLA price. It is not a bill forecast: overages and current-month count reductions require billing history and usage data. If `product` or `license_count` is unknown during planning, the tool reports the missing attributes without inventing product-specific billing behavior or an estimate.
+
 ## Quick Start
 
 ### Prerequisites
@@ -368,6 +389,7 @@ gcp-cost-mcp-server/
 │   └── tools/
 │       ├── deps.go                  # Consumer-side interfaces (PricingClient, FreeTierProvider)
 │       ├── supplemental_client.go   # Merges supplemental catalog into PricingClient
+│       ├── classify_resource_cost.go # Terraform resource cost classification
 │       ├── get_estimation_guide.go  # Dynamic guide generator
 │       ├── guide_builder.go         # SKU analysis for guide generation
 │       ├── service_lookup.go        # Service name → service ID resolution
@@ -384,6 +406,7 @@ flowchart TB
         direction TB
 
         Guide["get_estimation_guide<br/>─────────────────<br/>• Dynamic SKU analysis<br/>• Free tier info included<br/>• Self-contained"]
+        Classify["classify_resource_cost<br/>─────────────────<br/>• Terraform resource rules<br/>• Existence-billing warnings<br/>• Monthly estimate when possible"]
 
         Services["list_services<br/>─────────────────<br/>Returns: service IDs"]
         SKUs["list_skus<br/>─────────────────<br/>Returns: SKU IDs, regions"]

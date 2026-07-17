@@ -62,6 +62,7 @@ func main() {
 	// Define tools
 	toolList := []ai.Tool{
 		tools.NewGetEstimationGuide(g, pricingClientWrapped, freeTierService), // Should be called first to understand requirements
+		tools.NewClassifyResourceCost(g, pricingClientWrapped),
 		tools.NewListServices(g, pricingClientWrapped),
 		tools.NewListSKUs(g, pricingClientWrapped),
 		tools.NewGetSKUPrice(g, pricingClientWrapped),

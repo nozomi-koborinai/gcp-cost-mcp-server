@@ -54,8 +54,14 @@ func TestOfficeSKUPrice(t *testing.T) {
 	if sku.BillingModel != BillingModelExistence {
 		t.Fatalf("BillingModel = %q, want %q", sku.BillingModel, BillingModelExistence)
 	}
+	if sku.BillingTrigger != BillingTriggerConfigurationCreated {
+		t.Fatalf("BillingTrigger = %q, want %q", sku.BillingTrigger, BillingTriggerConfigurationCreated)
+	}
 	if sku.SourceURL == "" {
 		t.Fatal("SourceURL is empty")
+	}
+	if len(sku.ProductIDs) != 1 || sku.ProductIDs[0] != "Office2021ProfessionalPlus" {
+		t.Fatalf("ProductIDs = %v, want [Office2021ProfessionalPlus]", sku.ProductIDs)
 	}
 
 	resp, err := PriceResponse(SKUIDOfficeLTSC2021ProPlus, "USD")
@@ -75,6 +81,35 @@ func TestOfficeSKUPrice(t *testing.T) {
 
 	if _, err := PriceResponse(SKUIDOfficeLTSC2021ProPlus, "JPY"); err == nil {
 		t.Fatal("expected error for non-USD currency")
+	}
+}
+
+func TestFindSKUByProductID(t *testing.T) {
+	sku := FindSKUByProductID(ServiceIDLicenseManager, "Office2021ProfessionalPlus")
+	if sku == nil {
+		t.Fatal("FindSKUByProductID(Office2021ProfessionalPlus) = nil")
+	}
+	if sku.SKUID != SKUIDOfficeLTSC2021ProPlus {
+		t.Fatalf("FindSKUByProductID().SKUID = %q, want %q",
+			sku.SKUID, SKUIDOfficeLTSC2021ProPlus)
+	}
+
+	unsupported := []string{
+		"office2021professionalplus",
+		"projects/example/locations/us-central1/products/Office2021ProfessionalPlus",
+		"MicrosoftSQLServer2022Enterprise",
+	}
+	for _, productID := range unsupported {
+		if sku := FindSKUByProductID(ServiceIDLicenseManager, productID); sku != nil {
+			t.Fatalf("unexpected supplemental SKU for product %q: %+v", productID, sku)
+		}
+	}
+}
+
+func TestProductIDsForService(t *testing.T) {
+	got := ProductIDsForService(ServiceIDLicenseManager)
+	if len(got) != 1 || got[0] != "Office2021ProfessionalPlus" {
+		t.Fatalf("ProductIDsForService = %v, want [Office2021ProfessionalPlus]", got)
 	}
 }
 
